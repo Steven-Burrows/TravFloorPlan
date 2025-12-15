@@ -7,7 +7,7 @@ using System.Drawing.Drawing2D;
 
 namespace TravFloorPlan
 {
-    public partial class Form1
+    public partial class MainForm
     {
         private enum ObjectType { Wall, Door, Window, Table, Chair }
 
