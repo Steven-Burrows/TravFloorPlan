@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing.Drawing2D;
 
 namespace TravFloorPlan
@@ -9,14 +10,17 @@ namespace TravFloorPlan
     public partial class Form1
     {
         private enum ObjectType { Wall, Door, Window, Table, Chair }
+
         private class PlacedObject
         {
-            public ObjectType Type;
-            public Rectangle Rect; // base rect
-            public float RotationDegrees; // rotation around center
+            [Browsable(false)]
+            public ObjectType Type { get; set; }
+            public Rectangle Rect { get; set; }
+            public float RotationDegrees { get; set; }
         }
 
         private readonly List<PlacedObject> _objects = new();
+        private PlacedObject? _selectedObject = null;
         private ObjectType? _selectedType = null;
         private bool _isPlacing = false;
         private Point _placeStart;
@@ -37,6 +41,7 @@ namespace TravFloorPlan
             canvasPanel.MouseDown += CanvasPanel_MouseDown;
             canvasPanel.MouseMove += CanvasPanel_MouseMove;
             canvasPanel.MouseUp += CanvasPanel_MouseUp;
+            canvasPanel.MouseClick += CanvasPanel_MouseClick;
             canvasPanel.Paint += CanvasPanel_Paint;
             this.DoubleBuffered = true;
             this.KeyPreview = true;
@@ -87,6 +92,13 @@ namespace TravFloorPlan
             {
                 DrawObject(g, obj);
             }
+
+            if (_selectedObject != null)
+            {
+                using var selPen = new Pen(Color.Red, 2) { DashStyle = DashStyle.Dash };
+                DrawRotatedRectangle(g, selPen, _selectedObject.Rect, _selectedObject.RotationDegrees);
+            }
+
             if (_isPlacing && _selectedType.HasValue)
             {
                 var rect = GetCurrentRect(_placeStart, _lastMouse);
@@ -97,6 +109,45 @@ namespace TravFloorPlan
                 using var dashed = new Pen(Color.Gray) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
                 DrawRotatedRectangle(g, dashed, rect, _currentRotation);
             }
+        }
+
+        private void CanvasPanel_MouseClick(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                _selectedObject = HitTest(e.Location);
+                propertyGrid.SelectedObject = _selectedObject;
+                canvasPanel.Invalidate();
+            }
+            else if (e.Button == MouseButtons.Right)
+            {
+                _selectedObject = null;
+                propertyGrid.SelectedObject = null;
+                canvasPanel.Invalidate();
+            }
+        }
+
+        private PlacedObject? HitTest(Point location)
+        {
+            for (int i = _objects.Count - 1; i >= 0; i--) // topmost first
+            {
+                var obj = _objects[i];
+                if (PointInRotatedRect(location, obj.Rect, obj.RotationDegrees))
+                    return obj;
+            }
+            return null;
+        }
+
+        private static bool PointInRotatedRect(Point p, Rectangle rect, float degrees)
+        {
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            // inverse rotate point around center
+            using var path = new GraphicsPath();
+            path.AddRectangle(rect);
+            var m = new Matrix();
+            m.RotateAt(degrees, center);
+            path.Transform(m);
+            return path.IsVisible(p);
         }
 
         private void CanvasPanel_MouseDown(object? sender, MouseEventArgs e)
@@ -128,7 +179,10 @@ namespace TravFloorPlan
                 }
                 if (rect.Width > 4 && rect.Height > 4)
                 {
-                    _objects.Add(new PlacedObject { Type = _selectedType.Value, Rect = rect, RotationDegrees = _currentRotation });
+                    var obj = new PlacedObject { Type = _selectedType.Value, Rect = rect, RotationDegrees = _currentRotation };
+                    _objects.Add(obj);
+                    _selectedObject = obj;
+                    propertyGrid.SelectedObject = _selectedObject;
                     canvasPanel.Invalidate();
                 }
             }

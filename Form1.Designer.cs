@@ -30,11 +30,17 @@
         {
             splitContainer = new SplitContainer();
             paletteListBox = new ListBox();
+            rightSplitContainer = new SplitContainer();
             canvasPanel = new Panel();
+            propertyGrid = new PropertyGrid();
             ((System.ComponentModel.ISupportInitialize)splitContainer).BeginInit();
             splitContainer.Panel1.SuspendLayout();
             splitContainer.Panel2.SuspendLayout();
             splitContainer.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)rightSplitContainer).BeginInit();
+            rightSplitContainer.Panel1.SuspendLayout();
+            rightSplitContainer.Panel2.SuspendLayout();
+            rightSplitContainer.SuspendLayout();
             SuspendLayout();
             // 
             // splitContainer
@@ -49,8 +55,8 @@
             // 
             // splitContainer.Panel2
             // 
-            splitContainer.Panel2.Controls.Add(canvasPanel);
-            splitContainer.Size = new Size(1000, 700);
+            splitContainer.Panel2.Controls.Add(rightSplitContainer);
+            splitContainer.Size = new Size(1200, 700);
             splitContainer.SplitterDistance = 200;
             splitContainer.TabIndex = 0;
             // 
@@ -64,6 +70,23 @@
             paletteListBox.Size = new Size(200, 700);
             paletteListBox.TabIndex = 0;
             // 
+            // rightSplitContainer
+            // 
+            rightSplitContainer.Dock = DockStyle.Fill;
+            rightSplitContainer.Location = new Point(0, 0);
+            rightSplitContainer.Name = "rightSplitContainer";
+            // 
+            // rightSplitContainer.Panel1
+            // 
+            rightSplitContainer.Panel1.Controls.Add(canvasPanel);
+            // 
+            // rightSplitContainer.Panel2
+            // 
+            rightSplitContainer.Panel2.Controls.Add(propertyGrid);
+            rightSplitContainer.Size = new Size(996, 700);
+            rightSplitContainer.SplitterDistance = 803;
+            rightSplitContainer.TabIndex = 1;
+            // 
             // canvasPanel
             // 
             canvasPanel.BackColor = Color.White;
@@ -71,14 +94,23 @@
             canvasPanel.Dock = DockStyle.Fill;
             canvasPanel.Location = new Point(0, 0);
             canvasPanel.Name = "canvasPanel";
-            canvasPanel.Size = new Size(796, 700);
+            canvasPanel.Size = new Size(803, 700);
             canvasPanel.TabIndex = 0;
+            // 
+            // propertyGrid
+            // 
+            propertyGrid.BackColor = SystemColors.Control;
+            propertyGrid.Dock = DockStyle.Fill;
+            propertyGrid.Location = new Point(0, 0);
+            propertyGrid.Name = "propertyGrid";
+            propertyGrid.Size = new Size(189, 700);
+            propertyGrid.TabIndex = 0;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1000, 700);
+            ClientSize = new Size(1200, 700);
             Controls.Add(splitContainer);
             Name = "Form1";
             Text = "TravFloorPlan";
@@ -86,13 +118,19 @@
             splitContainer.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)splitContainer).EndInit();
             splitContainer.ResumeLayout(false);
+            rightSplitContainer.Panel1.ResumeLayout(false);
+            rightSplitContainer.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)rightSplitContainer).EndInit();
+            rightSplitContainer.ResumeLayout(false);
             ResumeLayout(false);
         }
 
         #endregion
 
         private System.Windows.Forms.SplitContainer splitContainer;
+        private System.Windows.Forms.SplitContainer rightSplitContainer;
         private System.Windows.Forms.ListBox paletteListBox;
         private System.Windows.Forms.Panel canvasPanel;
+        private System.Windows.Forms.PropertyGrid propertyGrid;
     }
 }
