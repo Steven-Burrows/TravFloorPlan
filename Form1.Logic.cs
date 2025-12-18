@@ -170,7 +170,13 @@ namespace TravFloorPlan
             var rotateRightItem = new ToolStripMenuItem("Rotate Right 90", null, (_, __) => RotateSelected(90f));
             var mirrorItem = new ToolStripMenuItem("Mirror (Triangle)", null, (_, __) => ToggleMirrorSelected());
             var deleteItem = new ToolStripMenuItem("Delete", null, (_, __) => DeleteSelected());
-            _canvasMenu.Items.AddRange(new ToolStripItem[] { copyItem, pasteItem, new ToolStripSeparator(), rotateLeftItem, rotateRightItem, mirrorItem, new ToolStripSeparator(), deleteItem });
+            var panItem = new ToolStripMenuItem("Pan", null, (_, __) =>
+            {
+                // Deselect current palette item to enable panning with left-drag on empty canvas
+                paletteListBox.ClearSelected();
+                _selectedType = null;
+            });
+            _canvasMenu.Items.AddRange(new ToolStripItem[] { panItem, new ToolStripSeparator(), copyItem, pasteItem, new ToolStripSeparator(), rotateLeftItem, rotateRightItem, mirrorItem, new ToolStripSeparator(), deleteItem });
             canvasPanel.ContextMenuStrip = _canvasMenu;
             _canvasMenu.Opening += (_, e) =>
             {
@@ -603,6 +609,23 @@ namespace TravFloorPlan
 
             if (e.Button == MouseButtons.Left)
             {
+                // If no placement type selected, allow left-drag panning when clicking empty space
+                if (!_selectedType.HasValue)
+                {
+                    var wp = ScreenToWorld(e.Location);
+                    var hit = HitTest(wp);
+                    if (hit == null)
+                    {
+                        // clear selection and start pan
+                        _selectedObject = null;
+                        propertyGrid.SelectedObject = null;
+                        _isPanning = true;
+                        _panStartScreen = e.Location;
+                        _panStartOffset = _pan;
+                        return;
+                    }
+                }
+
                 var worldPoint = _snapEnabled ? SnapPoint(ScreenToWorld(e.Location), GetSnapSizeFor(_selectedObject?.Type ?? _selectedType ?? ObjectType.Room)) : ScreenToWorld(e.Location);
 
                 if (_selectedObject != null && Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f)
@@ -724,7 +747,7 @@ namespace TravFloorPlan
 
         private void CanvasPanel_MouseUp(object? sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Middle)
+            if (_isPanning && (e.Button == MouseButtons.Middle || e.Button == MouseButtons.Left))
             {
                 _isPanning = false;
                 return;
