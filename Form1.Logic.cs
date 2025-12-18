@@ -855,25 +855,27 @@ namespace TravFloorPlan
         private static void DrawObject(Graphics g, PlacedObject obj, int gridSize)
         {
             var rect = obj.Rect;
+            // enforce semi-transparent background for all objects
+            Color semi = Color.FromArgb(120, obj.BackgroundColor);
             switch (obj.Type)
             {
                 case ObjectType.Room:
                     if (obj.BackgroundColor.A > 0)
-                        FillRotatedRectangle(g, new SolidBrush(obj.BackgroundColor), rect, obj.RotationDegrees);
+                        FillRotatedRectangle(g, new SolidBrush(semi), rect, obj.RotationDegrees);
                     using (var pen = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
                         DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
                     DrawRoomText(g, obj, rect, gridSize);
                     break;
                 case ObjectType.CircularRoom:
                     if (obj.BackgroundColor.A > 0)
-                        FillRotatedEllipse(g, new SolidBrush(obj.BackgroundColor), rect, obj.RotationDegrees);
+                        FillRotatedEllipse(g, new SolidBrush(semi), rect, obj.RotationDegrees);
                     using (var penC = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
                         DrawRotatedEllipse(g, penC, rect, obj.RotationDegrees);
                     DrawRoomText(g, obj, rect, gridSize);
                     break;
                 case ObjectType.TriangularRoom:
                     if (obj.BackgroundColor.A > 0)
-                        FillRotatedTriangle(g, new SolidBrush(obj.BackgroundColor), rect, obj.RotationDegrees, obj.Mirrored);
+                        FillRotatedTriangle(g, new SolidBrush(semi), rect, obj.RotationDegrees, obj.Mirrored);
                     using (var penT = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
                         DrawRotatedTriangle(g, penT, rect, obj.RotationDegrees, obj.Mirrored);
                     DrawRoomText(g, obj, rect, gridSize);
@@ -882,15 +884,15 @@ namespace TravFloorPlan
                     // handled in separate pass
                     break;
                 case ObjectType.Window:
-                    using (var brush = new SolidBrush(Color.LightSkyBlue)) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
+                    using (var brush = new SolidBrush(Color.FromArgb(120, Color.LightSkyBlue))) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
                     using (var pen2 = new Pen(Color.DeepSkyBlue)) DrawRotatedRectangle(g, pen2, rect, obj.RotationDegrees);
                     break;
                 case ObjectType.Table:
-                    using (var brush2 = new SolidBrush(Color.Peru)) FillRotatedRectangle(g, brush2, rect, obj.RotationDegrees);
+                    using (var brush2 = new SolidBrush(Color.FromArgb(120, Color.Peru))) FillRotatedRectangle(g, brush2, rect, obj.RotationDegrees);
                     using (var pen3 = new Pen(Color.SaddleBrown)) DrawRotatedRectangle(g, pen3, rect, obj.RotationDegrees);
                     break;
                 case ObjectType.Chair:
-                    using (var brush3 = new SolidBrush(Color.DarkOliveGreen)) FillRotatedRectangle(g, brush3, rect, obj.RotationDegrees);
+                    using (var brush3 = new SolidBrush(Color.FromArgb(120, Color.DarkOliveGreen))) FillRotatedRectangle(g, brush3, rect, obj.RotationDegrees);
                     using (var pen4 = new Pen(Color.Olive)) DrawRotatedRectangle(g, pen4, rect, obj.RotationDegrees);
                     break;
             }
