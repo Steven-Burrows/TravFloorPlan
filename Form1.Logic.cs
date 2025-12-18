@@ -116,6 +116,18 @@ namespace TravFloorPlan
 
         private PlacedObject? _clipboardObject;
 
+        private float _zoom = 1f;
+        private PointF _pan = new PointF(0, 0);
+        private bool _isPanning = false;
+        private Point _panStartScreen;
+        private PointF _panStartOffset;
+
+        // Ensure designer components are created before using controls
+        public MainForm()
+        {
+            InitializeComponent();
+        }
+
         private void InitializeFloorPlanUi()
         {
             // remove static type list, we dynamically build it with objects
@@ -145,6 +157,8 @@ namespace TravFloorPlan
             canvasPanel.MouseUp += CanvasPanel_MouseUp;
             canvasPanel.MouseClick += CanvasPanel_MouseClick;
             canvasPanel.Paint += CanvasPanel_Paint;
+            canvasPanel.MouseWheel += CanvasPanel_MouseWheel;
+            canvasPanel.MouseEnter += (_, __) => canvasPanel.Focus();
             this.DoubleBuffered = true;
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
@@ -383,7 +397,17 @@ namespace TravFloorPlan
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Color.White);
 
-            DrawGrid(g, canvasPanel.ClientSize, _gridSize);
+            // apply pan and zoom
+            g.TranslateTransform(_pan.X, _pan.Y);
+            g.ScaleTransform(_zoom, _zoom);
+
+            // draw grid in world coordinates within visible bounds
+            var worldLeft = (-_pan.X) / _zoom;
+            var worldTop = (-_pan.Y) / _zoom;
+            var worldWidth = canvasPanel.ClientSize.Width / _zoom;
+            var worldHeight = canvasPanel.ClientSize.Height / _zoom;
+            var worldBounds = new RectangleF(worldLeft, worldTop, worldWidth, worldHeight);
+            DrawGridWorld(g, worldBounds, _gridSize);
 
             // keep area grid size in sync
             foreach (var o in _objects)
@@ -477,9 +501,10 @@ namespace TravFloorPlan
 
         private void CanvasPanel_MouseClick(object? sender, MouseEventArgs e)
         {
+            var worldPoint = ScreenToWorld(e.Location);
             if (e.Button == MouseButtons.Left && _interaction == InteractionMode.None)
             {
-                _selectedObject = HitTest(e.Location);
+                _selectedObject = HitTest(worldPoint);
                 propertyGrid.SelectedObject = _selectedObject;
                 canvasPanel.Invalidate();
             }
@@ -568,25 +593,35 @@ namespace TravFloorPlan
 
         private void CanvasPanel_MouseDown(object? sender, MouseEventArgs e)
         {
+            if (e.Button == MouseButtons.Middle)
+            {
+                _isPanning = true;
+                _panStartScreen = e.Location;
+                _panStartOffset = _pan;
+                return;
+            }
+
             if (e.Button == MouseButtons.Left)
             {
+                var worldPoint = _snapEnabled ? SnapPoint(ScreenToWorld(e.Location), GetSnapSizeFor(_selectedObject?.Type ?? _selectedType ?? ObjectType.Room)) : ScreenToWorld(e.Location);
+
                 if (_selectedObject != null && Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f)
                 {
-                    var handle = HitTestHandle(e.Location, _selectedObject.Rect);
+                    var handle = HitTestHandle(worldPoint, _selectedObject.Rect);
                     if (handle != ResizeHandle.None)
                     {
                         _interaction = InteractionMode.Resize;
                         _activeHandle = handle;
                         var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
-                        _dragStart = _snapEnabled ? SnapPoint(e.Location, snap) : e.Location;
+                        _dragStart = _snapEnabled ? SnapPoint(worldPoint, snap) : worldPoint;
                         _originalRect = _selectedObject.Rect;
                         return;
                     }
-                    else if (PointInObject(e.Location, _selectedObject))
+                    else if (PointInObject(worldPoint, _selectedObject))
                     {
                         _interaction = InteractionMode.Move;
                         var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
-                        _dragStart = _snapEnabled ? SnapPoint(e.Location, snap) : e.Location;
+                        _dragStart = _snapEnabled ? SnapPoint(worldPoint, snap) : worldPoint;
                         _originalRect = _selectedObject.Rect;
                         return;
                     }
@@ -596,22 +631,38 @@ namespace TravFloorPlan
                 {
                     _isPlacing = true;
                     var snap = _snapEnabled ? GetSnapSizeFor(_selectedType.Value) : 0;
-                    _placeStart = _snapEnabled ? SnapPoint(e.Location, snap) : e.Location;
+                    _placeStart = _snapEnabled ? SnapPoint(worldPoint, snap) : worldPoint;
                     _lastMouse = _placeStart;
                 }
             }
         }
 
-        private int GetSnapSizeFor(ObjectType type) => type == ObjectType.Door ? Math.Max(1, _gridSize / 2) : _gridSize;
+        private PointF ScreenToWorldF(Point p)
+        {
+            return new PointF((p.X - _pan.X) / _zoom, (p.Y - _pan.Y) / _zoom);
+        }
+        private Point ScreenToWorld(Point p)
+        {
+            var f = ScreenToWorldF(p);
+            return new Point((int)Math.Round(f.X), (int)Math.Round(f.Y));
+        }
 
         private void CanvasPanel_MouseMove(object? sender, MouseEventArgs e)
         {
+            if (_isPanning)
+            {
+                _pan = new PointF(_panStartOffset.X + (e.Location.X - _panStartScreen.X), _panStartOffset.Y + (e.Location.Y - _panStartScreen.Y));
+                canvasPanel.Invalidate();
+                return;
+            }
+
             int snap = _snapEnabled
                 ? (_interaction != InteractionMode.None && _selectedObject != null
                     ? GetSnapSizeFor(_selectedObject.Type)
                     : (_isPlacing && _selectedType.HasValue ? GetSnapSizeFor(_selectedType.Value) : _gridSize))
                 : 0;
-            var loc = _snapEnabled ? SnapPoint(e.Location, snap) : e.Location;
+            var worldLoc = ScreenToWorld(e.Location);
+            var loc = _snapEnabled ? SnapPoint(worldLoc, snap) : worldLoc;
             _lastMouse = loc;
 
             if (_interaction == InteractionMode.Move && _selectedObject != null)
@@ -673,6 +724,12 @@ namespace TravFloorPlan
 
         private void CanvasPanel_MouseUp(object? sender, MouseEventArgs e)
         {
+            if (e.Button == MouseButtons.Middle)
+            {
+                _isPanning = false;
+                return;
+            }
+
             if (_interaction != InteractionMode.None)
             {
                 _interaction = InteractionMode.None;
@@ -682,7 +739,8 @@ namespace TravFloorPlan
 
             if (_isPlacing && e.Button == MouseButtons.Left && _selectedType.HasValue)
             {
-                var end = _snapEnabled ? SnapPoint(e.Location, GetSnapSizeFor(_selectedType.Value)) : e.Location;
+                var endWorld = ScreenToWorld(e.Location);
+                var end = _snapEnabled ? SnapPoint(endWorld, GetSnapSizeFor(_selectedType.Value)) : endWorld;
                 var rect = GetCurrentRect(_placeStart, end);
                 if (_snapEnabled)
                 {
@@ -708,6 +766,24 @@ namespace TravFloorPlan
             _isPlacing = false;
         }
 
+        private void CanvasPanel_MouseWheel(object? sender, MouseEventArgs e)
+        {
+            float oldZoom = _zoom;
+            float delta = e.Delta > 0 ? 1.1f : 0.9f;
+            float newZoom = Math.Clamp(oldZoom * delta, 0.2f, 10f);
+            if (Math.Abs(newZoom - oldZoom) < 0.0001f) return;
+
+            var worldBefore = ScreenToWorldF(e.Location);
+            _zoom = newZoom;
+            _pan = new PointF(
+                e.Location.X - _zoom * worldBefore.X,
+                e.Location.Y - _zoom * worldBefore.Y
+            );
+            canvasPanel.Invalidate();
+        }
+
+        private int GetSnapSizeFor(ObjectType type) => type == ObjectType.Door ? Math.Max(1, _gridSize / 2) : _gridSize;
+
         private string GenerateDefaultName(ObjectType type)
         {
             string baseName = type switch
@@ -729,35 +805,58 @@ namespace TravFloorPlan
             return $"{baseName} {idx}";
         }
 
+        private static Rectangle GetCurrentRect(Point start, Point end)
+        {
+            int x = Math.Min(start.X, end.X);
+            int y = Math.Min(start.Y, end.Y);
+            int w = Math.Abs(end.X - start.X);
+            int h = Math.Abs(end.Y - start.Y);
+            return new Rectangle(x, y, w, h);
+        }
+
+        private static Point SnapPoint(Point p, int grid)
+        {
+            if (grid <= 0) return p;
+            int x = (int)Math.Round(p.X / (double)grid) * grid;
+            int y = (int)Math.Round(p.Y / (double)grid) * grid;
+            return new Point(x, y);
+        }
+
+        private static Rectangle SnapRect(Rectangle r, int grid)
+        {
+            var p1 = SnapPoint(new Point(r.Left, r.Top), grid);
+            var p2 = SnapPoint(new Point(r.Right, r.Bottom), grid);
+            return GetCurrentRect(p1, p2);
+        }
+
         private static void DrawObject(Graphics g, PlacedObject obj, int gridSize)
         {
             var rect = obj.Rect;
             switch (obj.Type)
             {
                 case ObjectType.Room:
-                    // fill then outline using per-room colors
-                    if (!obj.BackgroundColor.IsEmpty && obj.BackgroundColor.A > 0)
+                    if (obj.BackgroundColor.A > 0)
                         FillRotatedRectangle(g, new SolidBrush(obj.BackgroundColor), rect, obj.RotationDegrees);
-                    using (var pen = new Pen(obj.LineColor, obj.LineWidth > 0 ? obj.LineWidth : 1f))
+                    using (var pen = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
                         DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
                     DrawRoomText(g, obj, rect, gridSize);
                     break;
                 case ObjectType.CircularRoom:
-                    if (!obj.BackgroundColor.IsEmpty && obj.BackgroundColor.A > 0)
+                    if (obj.BackgroundColor.A > 0)
                         FillRotatedEllipse(g, new SolidBrush(obj.BackgroundColor), rect, obj.RotationDegrees);
-                    using (var penC = new Pen(obj.LineColor, obj.LineWidth > 0 ? obj.LineWidth : 1f))
+                    using (var penC = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
                         DrawRotatedEllipse(g, penC, rect, obj.RotationDegrees);
                     DrawRoomText(g, obj, rect, gridSize);
                     break;
                 case ObjectType.TriangularRoom:
-                    if (!obj.BackgroundColor.IsEmpty && obj.BackgroundColor.A > 0)
+                    if (obj.BackgroundColor.A > 0)
                         FillRotatedTriangle(g, new SolidBrush(obj.BackgroundColor), rect, obj.RotationDegrees, obj.Mirrored);
-                    using (var penT = new Pen(obj.LineColor, obj.LineWidth > 0 ? obj.LineWidth : 1f))
+                    using (var penT = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
                         DrawRotatedTriangle(g, penT, rect, obj.RotationDegrees, obj.Mirrored);
                     DrawRoomText(g, obj, rect, gridSize);
                     break;
                 case ObjectType.Door:
-                    // handled in a separate pass to ensure doors are drawn last
+                    // handled in separate pass
                     break;
                 case ObjectType.Window:
                     using (var brush = new SolidBrush(Color.LightSkyBlue)) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
@@ -809,16 +908,15 @@ namespace TravFloorPlan
             using var erasePen = new Pen(Color.White, 6);
             using var pen = new Pen(Color.Black, 1);
 
-            // Draw a horizontal bar symbol centered, rotation is handled by transform
             int y = rect.Top + rect.Height / 2;
             int x1 = rect.Left;
             int x2 = rect.Right;
             int barSize = Math.Min(rect.Height, 10);
 
             // erase underlying room edges along the symbol path
-            g.DrawLine(erasePen, x1, y - barSize / 2, x1, y + barSize / 2); // left bar
-            g.DrawLine(erasePen, x2, y - barSize / 2, x2, y + barSize / 2); // right bar
-            g.DrawLine(erasePen, x1, y, x2, y); // center line
+            g.DrawLine(erasePen, x1, y - barSize / 2, x1, y + barSize / 2);
+            g.DrawLine(erasePen, x2, y - barSize / 2, x2, y + barSize / 2);
+            g.DrawLine(erasePen, x1, y, x2, y);
 
             // draw symbol
             g.DrawLine(pen, x1, y - barSize / 2, x1, y + barSize / 2);
@@ -896,37 +994,17 @@ namespace TravFloorPlan
             g.Restore(state);
         }
 
-        private static Rectangle GetCurrentRect(Point start, Point end)
-        {
-            int x = Math.Min(start.X, end.X);
-            int y = Math.Min(start.Y, end.Y);
-            int w = Math.Abs(end.X - start.X);
-            int h = Math.Abs(end.Y - start.Y);
-            return new Rectangle(x, y, w, h);
-        }
-
-        private static Point SnapPoint(Point p, int grid)
-        {
-            if (grid <= 0) return p;
-            int x = (int)Math.Round(p.X / (double)grid) * grid;
-            int y = (int)Math.Round(p.Y / (double)grid) * grid;
-            return new Point(x, y);
-        }
-
-        private static Rectangle SnapRect(Rectangle r, int grid)
-        {
-            var p1 = SnapPoint(new Point(r.Left, r.Top), grid);
-            var p2 = SnapPoint(new Point(r.Right, r.Bottom), grid);
-            return GetCurrentRect(p1, p2);
-        }
-
-        private static void DrawGrid(Graphics g, Size size, int grid)
+        private static void DrawGridWorld(Graphics g, RectangleF worldBounds, int grid)
         {
             using var pen = new Pen(Color.Gainsboro);
-            for (int x = 0; x < size.Width; x += grid)
-                g.DrawLine(pen, x, 0, x, size.Height);
-            for (int y = 0; y < size.Height; y += grid)
-                g.DrawLine(pen, 0, y, size.Width, y);
+            float left = (float)Math.Floor(worldBounds.Left / grid) * grid;
+            float right = (float)Math.Ceiling(worldBounds.Right / grid) * grid;
+            float top = (float)Math.Floor(worldBounds.Top / grid) * grid;
+            float bottom = (float)Math.Ceiling(worldBounds.Bottom / grid) * grid;
+            for (float x = left; x <= right; x += grid)
+                g.DrawLine(pen, x, top, x, bottom);
+            for (float y = top; y <= bottom; y += grid)
+                g.DrawLine(pen, left, y, right, y);
         }
     }
 }
