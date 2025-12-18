@@ -18,6 +18,21 @@ namespace TravFloorPlan
             public Rectangle Rect { get; set; }
             public float RotationDegrees { get; set; }
             public string? Name { get; set; }
+
+            [Browsable(false)]
+            public int GridSizeForArea { get; set; }
+
+            [Browsable(true)]
+            [ReadOnly(true)]
+            [DisplayName("Area (grid)")]
+            public float AreaGridUnits
+            {
+                get
+                {
+                    int g = GridSizeForArea > 0 ? GridSizeForArea : 1;
+                    return (Rect.Width / (float)g) * (Rect.Height / (float)g);
+                }
+            }
         }
 
         private readonly List<PlacedObject> _objects = new();
@@ -71,6 +86,9 @@ namespace TravFloorPlan
             public override string ToString() => _text;
         }
 
+        private Panel _summaryPanel;
+        private Label _summaryLabel;
+
         private void InitializeFloorPlanUi()
         {
             // remove static type list, we dynamically build it with objects
@@ -118,8 +136,20 @@ namespace TravFloorPlan
                 deleteItem.Enabled = hasSelection;
             };
 
+            // Create summary panel under the palette
+            _summaryPanel = new Panel { Dock = DockStyle.Bottom, Height = 70, Padding = new Padding(6) };
+            _summaryLabel = new Label { Dock = DockStyle.Fill, AutoSize = false, TextAlign = ContentAlignment.TopLeft };
+            _summaryPanel.Controls.Add(_summaryLabel);
+            // add to the same parent as the palette list
+            if (paletteListBox.Parent != null)
+            {
+                paletteListBox.Parent.Controls.Add(_summaryPanel);
+                _summaryPanel.BringToFront();
+            }
+
             RefreshPaletteList();
-            propertyGrid.PropertyValueChanged += (_, __) => RefreshPaletteList();
+            UpdateSummaryPanel();
+            propertyGrid.PropertyValueChanged += (_, __) => { RefreshPaletteList(); UpdateSummaryPanel(); };
         }
 
         private void RefreshPaletteList()
@@ -148,6 +178,7 @@ namespace TravFloorPlan
                     if (item is PaletteEntry pe && pe.ObjectRef == prevObj)
                     {
                         paletteListBox.SelectedItem = item;
+                        UpdateSummaryPanel();
                         return;
                     }
                 }
@@ -159,10 +190,39 @@ namespace TravFloorPlan
                     if (item is PaletteEntry pe && pe.IsHeader && pe.HeaderType == prevType.Value)
                     {
                         paletteListBox.SelectedItem = item;
+                        UpdateSummaryPanel();
                         return;
                     }
                 }
             }
+            UpdateSummaryPanel();
+        }
+
+        private void UpdateSummaryPanel()
+        {
+            if (_summaryLabel == null) return;
+            int rooms = 0, doors = 0, windows = 0, tables = 0, chairs = 0;
+            double totalRoomArea = 0;
+            foreach (var o in _objects)
+            {
+                switch (o.Type)
+                {
+                    case ObjectType.Room:
+                        rooms++;
+                        int g = _gridSize > 0 ? _gridSize : 1;
+                        totalRoomArea += (o.Rect.Width / (double)g) * (o.Rect.Height / (double)g);
+                        break;
+                    case ObjectType.Door: doors++; break;
+                    case ObjectType.Window: windows++; break;
+                    case ObjectType.Table: tables++; break;
+                    case ObjectType.Chair: chairs++; break;
+                }
+            }
+            _summaryLabel.Text =
+                "Summary\r\n" +
+                $"Rooms: {rooms}    Doors: {doors}\r\n" +
+                $"Windows: {windows}    Tables: {tables}    Chairs: {chairs}\r\n" +
+                $"Total room area (grid): {totalRoomArea:0.#}";
         }
 
         private void RotateSelected(float deltaDegrees)
@@ -211,6 +271,7 @@ namespace TravFloorPlan
                 propertyGrid.SelectedObject = null;
                 canvasPanel.Invalidate();
                 RefreshPaletteList();
+                UpdateSummaryPanel();
             }
         }
 
@@ -229,12 +290,18 @@ namespace TravFloorPlan
 
             DrawGrid(g, canvasPanel.ClientSize, _gridSize);
 
+            // keep area grid size in sync
+            foreach (var o in _objects)
+            {
+                o.GridSizeForArea = _gridSize;
+            }
+
             // draw non-door objects first
             foreach (var obj in _objects)
             {
                 if (obj.Type != ObjectType.Door)
                 {
-                    DrawObject(g, obj);
+                    DrawObject(g, obj, _gridSize);
                 }
             }
             // draw doors last
@@ -407,6 +474,7 @@ namespace TravFloorPlan
                 _selectedObject.Rect = newRect;
                 propertyGrid.Refresh();
                 canvasPanel.Invalidate();
+                UpdateSummaryPanel();
                 return;
             }
             else if (_interaction == InteractionMode.Resize && _selectedObject != null)
@@ -447,6 +515,7 @@ namespace TravFloorPlan
                 _selectedObject.Rect = newRect;
                 propertyGrid.Refresh();
                 canvasPanel.Invalidate();
+                UpdateSummaryPanel();
                 return;
             }
 
@@ -473,7 +542,7 @@ namespace TravFloorPlan
                 }
                 if (rect.Width > 4 && rect.Height > 4)
                 {
-                    var obj = new PlacedObject { Type = _selectedType.Value, Rect = rect, RotationDegrees = _currentRotation };
+                    var obj = new PlacedObject { Type = _selectedType.Value, Rect = rect, RotationDegrees = _currentRotation, GridSizeForArea = _gridSize };
 
 
                     if (string.IsNullOrWhiteSpace(obj.Name))
@@ -485,6 +554,7 @@ namespace TravFloorPlan
                     propertyGrid.SelectedObject = _selectedObject;
                     canvasPanel.Invalidate();
                     RefreshPaletteList();
+                    UpdateSummaryPanel();
                 }
             }
             _isPlacing = false;
@@ -509,39 +579,7 @@ namespace TravFloorPlan
             return $"{baseName} {idx}";
         }
 
-        private static Rectangle GetCurrentRect(Point start, Point end)
-        {
-            int x = Math.Min(start.X, end.X);
-            int y = Math.Min(start.Y, end.Y);
-            int w = Math.Abs(end.X - start.X);
-            int h = Math.Abs(end.Y - start.Y);
-            return new Rectangle(x, y, w, h);
-        }
-
-        private static Point SnapPoint(Point p, int grid)
-        {
-            int x = (int)Math.Round(p.X / (double)grid) * grid;
-            int y = (int)Math.Round(p.Y / (double)grid) * grid;
-            return new Point(x, y);
-        }
-
-        private static Rectangle SnapRect(Rectangle r, int grid)
-        {
-            var p1 = SnapPoint(new Point(r.Left, r.Top), grid);
-            var p2 = SnapPoint(new Point(r.Right, r.Bottom), grid);
-            return GetCurrentRect(p1, p2);
-        }
-
-        private static void DrawGrid(Graphics g, Size size, int grid)
-        {
-            using var pen = new Pen(Color.Gainsboro);
-            for (int x = 0; x < size.Width; x += grid)
-                g.DrawLine(pen, x, 0, x, size.Height);
-            for (int y = 0; y < size.Height; y += grid)
-                g.DrawLine(pen, 0, y, size.Width, y);
-        }
-
-        private static void DrawObject(Graphics g, PlacedObject obj)
+        private static void DrawObject(Graphics g, PlacedObject obj, int gridSize)
         {
             var rect = obj.Rect;
             switch (obj.Type)
@@ -550,9 +588,19 @@ namespace TravFloorPlan
                     using (var pen = new Pen(Color.Black, 4)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
                     if (!string.IsNullOrWhiteSpace(obj.Name))
                     {
-                        using var f = new Font("Segoe UI", 10f, FontStyle.Bold);
+                        using var nameFont = new Font("Segoe UI", 10f, FontStyle.Bold);
+                        using var areaFont = new Font("Segoe UI", 8f, FontStyle.Regular);
+                        var areaUnits = (rect.Width / (float)gridSize) * (rect.Height / (float)gridSize);
+                        string areaText = $"{areaUnits:0.#}";
+                        var nameSize = g.MeasureString(obj.Name, nameFont);
+                        var areaSize = g.MeasureString(areaText, areaFont);
+                        float totalH = nameSize.Height + areaSize.Height;
+                        float startY = rect.Top + rect.Height / 2f - totalH / 2f;
                         var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                        g.DrawString(obj.Name, f, Brushes.Black, new RectangleF(rect.X, rect.Y, rect.Width, rect.Height), format);
+                        var nameRect = new RectangleF(rect.Left, startY, rect.Width, nameSize.Height);
+                        var areaRect = new RectangleF(rect.Left, startY + nameSize.Height, rect.Width, areaSize.Height);
+                        g.DrawString(obj.Name, nameFont, Brushes.Black, nameRect, format);
+                        g.DrawString(areaText, areaFont, Brushes.Black, areaRect, format);
                     }
                     break;
                 case ObjectType.Door:
@@ -560,15 +608,15 @@ namespace TravFloorPlan
                     break;
                 case ObjectType.Window:
                     using (var brush = new SolidBrush(Color.LightSkyBlue)) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
-                    using (var pen = new Pen(Color.DeepSkyBlue)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
+                    using (var pen2 = new Pen(Color.DeepSkyBlue)) DrawRotatedRectangle(g, pen2, rect, obj.RotationDegrees);
                     break;
                 case ObjectType.Table:
-                    using (var brush = new SolidBrush(Color.Peru)) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
-                    using (var pen = new Pen(Color.SaddleBrown)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
+                    using (var brush2 = new SolidBrush(Color.Peru)) FillRotatedRectangle(g, brush2, rect, obj.RotationDegrees);
+                    using (var pen3 = new Pen(Color.SaddleBrown)) DrawRotatedRectangle(g, pen3, rect, obj.RotationDegrees);
                     break;
                 case ObjectType.Chair:
-                    using (var brush = new SolidBrush(Color.DarkOliveGreen)) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
-                    using (var pen = new Pen(Color.Olive)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
+                    using (var brush3 = new SolidBrush(Color.DarkOliveGreen)) FillRotatedRectangle(g, brush3, rect, obj.RotationDegrees);
+                    using (var pen4 = new Pen(Color.Olive)) DrawRotatedRectangle(g, pen4, rect, obj.RotationDegrees);
                     break;
             }
         }
@@ -623,6 +671,39 @@ namespace TravFloorPlan
             g.TranslateTransform(-center.X, -center.Y);
             g.FillRectangle(brush, rect);
             g.Restore(state);
+        }
+
+        private static Rectangle GetCurrentRect(Point start, Point end)
+        {
+            int x = Math.Min(start.X, end.X);
+            int y = Math.Min(start.Y, end.Y);
+            int w = Math.Abs(end.X - start.X);
+            int h = Math.Abs(end.Y - start.Y);
+            return new Rectangle(x, y, w, h);
+        }
+
+        private static Point SnapPoint(Point p, int grid)
+        {
+            if (grid <= 0) return p;
+            int x = (int)Math.Round(p.X / (double)grid) * grid;
+            int y = (int)Math.Round(p.Y / (double)grid) * grid;
+            return new Point(x, y);
+        }
+
+        private static Rectangle SnapRect(Rectangle r, int grid)
+        {
+            var p1 = SnapPoint(new Point(r.Left, r.Top), grid);
+            var p2 = SnapPoint(new Point(r.Right, r.Bottom), grid);
+            return GetCurrentRect(p1, p2);
+        }
+
+        private static void DrawGrid(Graphics g, Size size, int grid)
+        {
+            using var pen = new Pen(Color.Gainsboro);
+            for (int x = 0; x < size.Width; x += grid)
+                g.DrawLine(pen, x, 0, x, size.Height);
+            for (int y = 0; y < size.Height; y += grid)
+                g.DrawLine(pen, 0, y, size.Width, y);
         }
     }
 }
