@@ -10,6 +10,7 @@ namespace TravFloorPlan
     public partial class MainForm
     {
         private enum ObjectType { Room, CircularRoom, TriangularRoom, Door, Window, Table, Chair }
+        private enum ObjectGroup { Rooms, Doorways, Others }
 
         private class PlacedObject
         {
@@ -18,27 +19,20 @@ namespace TravFloorPlan
             public Rectangle Rect { get; set; }
             public float RotationDegrees { get; set; }
             public string? Name { get; set; }
-
             [Browsable(false)]
             public int GridSizeForArea { get; set; }
-
             [Browsable(true)]
             [DisplayName("Mirror (triangle)")]
             public bool Mirrored { get; set; }
-
-            // New appearance properties for rooms
             [Browsable(true)]
             [DisplayName("Line Width")]
             public float LineWidth { get; set; } = 4f;
-
             [Browsable(true)]
             [DisplayName("Line Color")]
             public Color LineColor { get; set; } = Color.Black;
-
             [Browsable(true)]
             [DisplayName("Background Color")]
             public Color BackgroundColor { get; set; } = Color.Transparent;
-
             [Browsable(true)]
             [ReadOnly(true)]
             [DisplayName("Area (grid)")]
@@ -60,6 +54,56 @@ namespace TravFloorPlan
             }
         }
 
+        private static ObjectGroup GetGroupForType(ObjectType type) => type switch
+        {
+            ObjectType.Room or ObjectType.CircularRoom or ObjectType.TriangularRoom => ObjectGroup.Rooms,
+            ObjectType.Door => ObjectGroup.Doorways,
+            _ => ObjectGroup.Others
+        };
+
+        private static ObjectType GetDefaultTypeForGroup(ObjectGroup group) => group switch
+        {
+            ObjectGroup.Rooms => ObjectType.Room,
+            ObjectGroup.Doorways => ObjectType.Door,
+            ObjectGroup.Others => ObjectType.Window,
+            _ => ObjectType.Room
+        };
+
+        private class PaletteEntry
+        {
+            public bool IsHeader { get; }
+            public ObjectGroup HeaderGroup { get; }
+            public PlacedObject? ObjectRef { get; }
+            private readonly string _text;
+            public PaletteEntry(ObjectGroup group)
+            {
+                IsHeader = true;
+                HeaderGroup = group;
+                _text = group.ToString();
+            }
+            public PaletteEntry(PlacedObject obj)
+            {
+                IsHeader = false;
+                ObjectRef = obj;
+                HeaderGroup = GetGroupForType(obj.Type);
+                var name = string.IsNullOrWhiteSpace(obj.Name) ? "<unnamed>" : obj.Name;
+                _text = $"      - {name}"; // object line
+            }
+            public override string ToString() => _text;
+        }
+
+        private class TypeEntry
+        {
+            public ObjectType Type { get; }
+            private readonly string _text;
+            public TypeEntry(ObjectType type)
+            {
+                Type = type;
+                _text = $"   • {type}"; // type line
+            }
+            public override string ToString() => _text;
+        }
+
         private readonly List<PlacedObject> _objects = new();
         private PlacedObject? _selectedObject = null;
         private ObjectType? _selectedType = null;
@@ -67,62 +111,25 @@ namespace TravFloorPlan
         private Point _placeStart;
         private Point _lastMouse;
         private float _currentRotation = 0f;
-
         private int _gridSize = 20;
         private bool _snapEnabled = true;
-
-        // Drag/resize state
         private enum InteractionMode { None, Move, Resize }
         private InteractionMode _interaction = InteractionMode.None;
         private Point _dragStart;
         private Rectangle _originalRect;
         private ResizeHandle _activeHandle = ResizeHandle.None;
         private const int HandleSize = 8;
-
-        private enum ResizeHandle
-        {
-            None,
-            N, S, E, W,
-            NE, NW, SE, SW
-        }
-
+        private enum ResizeHandle { None, N, S, E, W, NE, NW, SE, SW }
         private ContextMenuStrip _canvasMenu;
-
-        private class PaletteEntry
-        {
-            public bool IsHeader { get; }
-            public ObjectType HeaderType { get; }
-            public PlacedObject? ObjectRef { get; }
-            private readonly string _text;
-            public PaletteEntry(ObjectType type)
-            {
-                IsHeader = true;
-                HeaderType = type;
-                _text = type.ToString();
-            }
-            public PaletteEntry(PlacedObject obj)
-            {
-                IsHeader = false;
-                ObjectRef = obj;
-                HeaderType = obj.Type;
-                var name = string.IsNullOrWhiteSpace(obj.Name) ? "<unnamed>" : obj.Name;
-                _text = $"   - {name}";
-            }
-            public override string ToString() => _text;
-        }
-
         private Panel _summaryPanel;
         private Label _summaryLabel;
-
         private PlacedObject? _clipboardObject;
-
         private float _zoom = 1f;
         private PointF _pan = new PointF(0, 0);
         private bool _isPanning = false;
         private Point _panStartScreen;
         private PointF _panStartOffset;
 
-        // Ensure designer components are created before using controls
         public MainForm()
         {
             InitializeComponent();
@@ -130,7 +137,6 @@ namespace TravFloorPlan
 
         private void InitializeFloorPlanUi()
         {
-            // remove static type list, we dynamically build it with objects
             paletteListBox.Items.Clear();
             paletteListBox.SelectedIndexChanged += (_, __) =>
             {
@@ -138,7 +144,7 @@ namespace TravFloorPlan
                 {
                     if (entry.IsHeader)
                     {
-                        _selectedType = entry.HeaderType;
+                        _selectedType = GetDefaultTypeForGroup(entry.HeaderGroup);
                     }
                     else if (entry.ObjectRef != null)
                     {
@@ -147,9 +153,9 @@ namespace TravFloorPlan
                         canvasPanel.Invalidate();
                     }
                 }
-                else if (paletteListBox.SelectedItem is ObjectType type)
+                else if (paletteListBox.SelectedItem is TypeEntry te)
                 {
-                    _selectedType = type;
+                    _selectedType = te.Type;
                 }
             };
             canvasPanel.MouseDown += CanvasPanel_MouseDown;
@@ -205,24 +211,50 @@ namespace TravFloorPlan
             propertyGrid.PropertyValueChanged += (_, __) => { RefreshPaletteList(); UpdateSummaryPanel(); };
         }
 
+        private static IEnumerable<ObjectType> GetTypesForGroup(ObjectGroup group)
+        {
+            switch (group)
+            {
+                case ObjectGroup.Rooms:
+                    return new[] { ObjectType.Room, ObjectType.CircularRoom, ObjectType.TriangularRoom };
+                case ObjectGroup.Doorways:
+                    return new[] { ObjectType.Door };
+                case ObjectGroup.Others:
+                    return new[] { ObjectType.Window, ObjectType.Table, ObjectType.Chair };
+                default:
+                    return Array.Empty<ObjectType>();
+            }
+        }
+
         private void RefreshPaletteList()
         {
             var prevObj = _selectedObject;
             var prevType = _selectedType;
             paletteListBox.BeginUpdate();
             paletteListBox.Items.Clear();
-            foreach (ObjectType type in Enum.GetValues(typeof(ObjectType)))
+
+            var groups = new[] { ObjectGroup.Rooms, ObjectGroup.Doorways, ObjectGroup.Others };
+            foreach (var group in groups)
             {
-                var header = new PaletteEntry(type);
+                var header = new PaletteEntry(group);
                 paletteListBox.Items.Add(header);
-                foreach (var obj in _objects)
+
+                // For each type in the group, add the type entry, then its objects
+                foreach (var type in GetTypesForGroup(group))
                 {
-                    if (obj.Type == type)
+                    paletteListBox.Items.Add(new TypeEntry(type));
+
+                    // Add objects that belong to this exact type under the type entry
+                    foreach (var obj in _objects)
                     {
-                        paletteListBox.Items.Add(new PaletteEntry(obj));
+                        if (obj.Type == type)
+                        {
+                            paletteListBox.Items.Add(new PaletteEntry(obj));
+                        }
                     }
                 }
             }
+
             paletteListBox.EndUpdate();
             if (prevObj != null)
             {
@@ -238,9 +270,10 @@ namespace TravFloorPlan
             }
             if (prevType.HasValue)
             {
+                var prevGroup = GetGroupForType(prevType.Value);
                 foreach (var item in paletteListBox.Items)
                 {
-                    if (item is PaletteEntry pe && pe.IsHeader && pe.HeaderType == prevType.Value)
+                    if (item is PaletteEntry pe && pe.IsHeader && pe.HeaderGroup == prevGroup)
                     {
                         paletteListBox.SelectedItem = item;
                         UpdateSummaryPanel();
