@@ -130,9 +130,21 @@ namespace TravFloorPlan
 
             DrawGrid(g, canvasPanel.ClientSize, _gridSize);
 
+            // draw non-door objects first
             foreach (var obj in _objects)
             {
-                DrawObject(g, obj);
+                if (obj.Type != ObjectType.Door)
+                {
+                    DrawObject(g, obj);
+                }
+            }
+            // draw doors last
+            foreach (var obj in _objects)
+            {
+                if (obj.Type == ObjectType.Door)
+                {
+                    DrawDoorSymbol(g, obj.Rect, obj.RotationDegrees);
+                }
             }
 
             if (_selectedObject != null)
@@ -251,14 +263,16 @@ namespace TravFloorPlan
                     {
                         _interaction = InteractionMode.Resize;
                         _activeHandle = handle;
-                        _dragStart = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+                        var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
+                        _dragStart = _snapEnabled ? SnapPoint(e.Location, snap) : e.Location;
                         _originalRect = _selectedObject.Rect;
                         return;
                     }
                     else if (PointInRotatedRect(e.Location, _selectedObject.Rect, _selectedObject.RotationDegrees))
                     {
                         _interaction = InteractionMode.Move;
-                        _dragStart = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+                        var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
+                        _dragStart = _snapEnabled ? SnapPoint(e.Location, snap) : e.Location;
                         _originalRect = _selectedObject.Rect;
                         return;
                     }
@@ -267,15 +281,23 @@ namespace TravFloorPlan
                 if (_selectedType.HasValue)
                 {
                     _isPlacing = true;
-                    _placeStart = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+                    var snap = _snapEnabled ? GetSnapSizeFor(_selectedType.Value) : 0;
+                    _placeStart = _snapEnabled ? SnapPoint(e.Location, snap) : e.Location;
                     _lastMouse = _placeStart;
                 }
             }
         }
 
+        private int GetSnapSizeFor(ObjectType type) => type == ObjectType.Door ? Math.Max(1, _gridSize / 2) : _gridSize;
+
         private void CanvasPanel_MouseMove(object? sender, MouseEventArgs e)
         {
-            var loc = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+            int snap = _snapEnabled
+                ? (_interaction != InteractionMode.None && _selectedObject != null
+                    ? GetSnapSizeFor(_selectedObject.Type)
+                    : (_isPlacing && _selectedType.HasValue ? GetSnapSizeFor(_selectedType.Value) : _gridSize))
+                : 0;
+            var loc = _snapEnabled ? SnapPoint(e.Location, snap) : e.Location;
             _lastMouse = loc;
 
             if (_interaction == InteractionMode.Move && _selectedObject != null)
@@ -344,15 +366,27 @@ namespace TravFloorPlan
 
             if (_isPlacing && e.Button == MouseButtons.Left && _selectedType.HasValue)
             {
-                var end = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+                var end = _snapEnabled ? SnapPoint(e.Location, GetSnapSizeFor(_selectedType.Value)) : e.Location;
                 var rect = GetCurrentRect(_placeStart, end);
                 if (_snapEnabled)
                 {
-                    rect = SnapRect(rect, _gridSize);
+                    rect = SnapRect(rect, GetSnapSizeFor(_selectedType.Value));
                 }
                 if (rect.Width > 4 && rect.Height > 4)
                 {
                     var obj = new PlacedObject { Type = _selectedType.Value, Rect = rect, RotationDegrees = _currentRotation };
+
+                    // Door placement validation: must overlap a room
+                    if (obj.Type == ObjectType.Door)
+                    {
+                        bool overlapsRoom = _objects.Exists(o => o.Type == ObjectType.Room && o.Rect.IntersectsWith(obj.Rect));
+                        if (!overlapsRoom)
+                        {
+                            _isPlacing = false;
+                            return;
+                        }
+                    }
+
                     if (obj.Type == ObjectType.Room && string.IsNullOrWhiteSpace(obj.Name))
                     {
                         obj.Name = GenerateDefaultRoomName();
@@ -416,7 +450,6 @@ namespace TravFloorPlan
             {
                 case ObjectType.Room:
                     using (var pen = new Pen(Color.Black, 4)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
-                    // draw name centered inside the room
                     if (!string.IsNullOrWhiteSpace(obj.Name))
                     {
                         using var f = new Font("Segoe UI", 10f, FontStyle.Bold);
@@ -425,8 +458,7 @@ namespace TravFloorPlan
                     }
                     break;
                 case ObjectType.Door:
-                    using (var brush = new SolidBrush(Color.SaddleBrown)) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
-                    using (var pen = new Pen(Color.SaddleBrown)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
+                    // handled in a separate pass to ensure doors are drawn last
                     break;
                 case ObjectType.Window:
                     using (var brush = new SolidBrush(Color.LightSkyBlue)) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
@@ -441,6 +473,36 @@ namespace TravFloorPlan
                     using (var pen = new Pen(Color.Olive)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
                     break;
             }
+        }
+
+        private static void DrawDoorSymbol(Graphics g, Rectangle rect, float degrees)
+        {
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            var state = g.Save();
+            g.TranslateTransform(center.X, center.Y);
+            g.RotateTransform(degrees);
+            g.TranslateTransform(-center.X, -center.Y);
+
+            using var erasePen = new Pen(Color.White, 6);
+            using var pen = new Pen(Color.Black, 1);
+
+            // Draw a horizontal bar symbol centered, rotation is handled by transform
+            int y = rect.Top + rect.Height / 2;
+            int x1 = rect.Left;
+            int x2 = rect.Right;
+            int barSize = Math.Min(rect.Height, 10);
+
+            // erase underlying room edges along the symbol path
+            g.DrawLine(erasePen, x1, y - barSize / 2, x1, y + barSize / 2); // left bar
+            g.DrawLine(erasePen, x2, y - barSize / 2, x2, y + barSize / 2); // right bar
+            g.DrawLine(erasePen, x1, y, x2, y); // center line
+
+            // draw symbol
+            g.DrawLine(pen, x1, y - barSize / 2, x1, y + barSize / 2);
+            g.DrawLine(pen, x2, y - barSize / 2, x2, y + barSize / 2);
+            g.DrawLine(pen, x1, y, x2, y);
+
+            g.Restore(state);
         }
 
         private static void DrawRotatedRectangle(Graphics g, Pen pen, Rectangle rect, float degrees)
