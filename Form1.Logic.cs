@@ -48,13 +48,52 @@ namespace TravFloorPlan
 
         private ContextMenuStrip _canvasMenu;
 
+        private class PaletteEntry
+        {
+            public bool IsHeader { get; }
+            public ObjectType HeaderType { get; }
+            public PlacedObject? ObjectRef { get; }
+            private readonly string _text;
+            public PaletteEntry(ObjectType type)
+            {
+                IsHeader = true;
+                HeaderType = type;
+                _text = type.ToString();
+            }
+            public PaletteEntry(PlacedObject obj)
+            {
+                IsHeader = false;
+                ObjectRef = obj;
+                HeaderType = obj.Type;
+                var name = string.IsNullOrWhiteSpace(obj.Name) ? "<unnamed>" : obj.Name;
+                _text = $"   - {name}";
+            }
+            public override string ToString() => _text;
+        }
+
         private void InitializeFloorPlanUi()
         {
-            paletteListBox.Items.AddRange(new object[] { ObjectType.Room, ObjectType.Door, ObjectType.Window, ObjectType.Table, ObjectType.Chair });
+            // remove static type list, we dynamically build it with objects
+            paletteListBox.Items.Clear();
             paletteListBox.SelectedIndexChanged += (_, __) =>
             {
-                if (paletteListBox.SelectedItem is ObjectType type)
+                if (paletteListBox.SelectedItem is PaletteEntry entry)
+                {
+                    if (entry.IsHeader)
+                    {
+                        _selectedType = entry.HeaderType;
+                    }
+                    else if (entry.ObjectRef != null)
+                    {
+                        _selectedObject = entry.ObjectRef;
+                        propertyGrid.SelectedObject = _selectedObject;
+                        canvasPanel.Invalidate();
+                    }
+                }
+                else if (paletteListBox.SelectedItem is ObjectType type)
+                {
                     _selectedType = type;
+                }
             };
             canvasPanel.MouseDown += CanvasPanel_MouseDown;
             canvasPanel.MouseMove += CanvasPanel_MouseMove;
@@ -66,13 +105,72 @@ namespace TravFloorPlan
             this.KeyDown += Form1_KeyDown;
 
             _canvasMenu = new ContextMenuStrip();
+            var rotateLeftItem = new ToolStripMenuItem("Rotate Left 90", null, (_, __) => RotateSelected(-90f));
+            var rotateRightItem = new ToolStripMenuItem("Rotate Right 90", null, (_, __) => RotateSelected(90f));
             var deleteItem = new ToolStripMenuItem("Delete", null, (_, __) => DeleteSelected());
-            _canvasMenu.Items.Add(deleteItem);
+            _canvasMenu.Items.AddRange(new ToolStripItem[] { rotateLeftItem, rotateRightItem, new ToolStripSeparator(), deleteItem });
             canvasPanel.ContextMenuStrip = _canvasMenu;
             _canvasMenu.Opening += (_, e) =>
             {
-                deleteItem.Enabled = _selectedObject != null;
+                bool hasSelection = _selectedObject != null;
+                rotateLeftItem.Enabled = hasSelection;
+                rotateRightItem.Enabled = hasSelection;
+                deleteItem.Enabled = hasSelection;
             };
+
+            RefreshPaletteList();
+            propertyGrid.PropertyValueChanged += (_, __) => RefreshPaletteList();
+        }
+
+        private void RefreshPaletteList()
+        {
+            var prevObj = _selectedObject;
+            var prevType = _selectedType;
+            paletteListBox.BeginUpdate();
+            paletteListBox.Items.Clear();
+            foreach (ObjectType type in Enum.GetValues(typeof(ObjectType)))
+            {
+                var header = new PaletteEntry(type);
+                paletteListBox.Items.Add(header);
+                foreach (var obj in _objects)
+                {
+                    if (obj.Type == type)
+                    {
+                        paletteListBox.Items.Add(new PaletteEntry(obj));
+                    }
+                }
+            }
+            paletteListBox.EndUpdate();
+            if (prevObj != null)
+            {
+                foreach (var item in paletteListBox.Items)
+                {
+                    if (item is PaletteEntry pe && pe.ObjectRef == prevObj)
+                    {
+                        paletteListBox.SelectedItem = item;
+                        return;
+                    }
+                }
+            }
+            if (prevType.HasValue)
+            {
+                foreach (var item in paletteListBox.Items)
+                {
+                    if (item is PaletteEntry pe && pe.IsHeader && pe.HeaderType == prevType.Value)
+                    {
+                        paletteListBox.SelectedItem = item;
+                        return;
+                    }
+                }
+            }
+        }
+
+        private void RotateSelected(float deltaDegrees)
+        {
+            if (_selectedObject == null) return;
+            _selectedObject.RotationDegrees = NormalizeAngle(_selectedObject.RotationDegrees + deltaDegrees);
+            propertyGrid.Refresh();
+            canvasPanel.Invalidate();
         }
 
         protected override void OnLoad(EventArgs e)
@@ -112,6 +210,7 @@ namespace TravFloorPlan
                 _selectedObject = null;
                 propertyGrid.SelectedObject = null;
                 canvasPanel.Invalidate();
+                RefreshPaletteList();
             }
         }
 
@@ -376,35 +475,34 @@ namespace TravFloorPlan
                 {
                     var obj = new PlacedObject { Type = _selectedType.Value, Rect = rect, RotationDegrees = _currentRotation };
 
-                    // Door placement validation: must overlap a room
-                    if (obj.Type == ObjectType.Door)
-                    {
-                        bool overlapsRoom = _objects.Exists(o => o.Type == ObjectType.Room && o.Rect.IntersectsWith(obj.Rect));
-                        if (!overlapsRoom)
-                        {
-                            _isPlacing = false;
-                            return;
-                        }
-                    }
 
-                    if (obj.Type == ObjectType.Room && string.IsNullOrWhiteSpace(obj.Name))
+                    if (string.IsNullOrWhiteSpace(obj.Name))
                     {
-                        obj.Name = GenerateDefaultRoomName();
+                        obj.Name = GenerateDefaultName(obj.Type);
                     }
                     _objects.Add(obj);
                     _selectedObject = obj;
                     propertyGrid.SelectedObject = _selectedObject;
                     canvasPanel.Invalidate();
+                    RefreshPaletteList();
                 }
             }
             _isPlacing = false;
         }
 
-        private string GenerateDefaultRoomName()
+        private string GenerateDefaultName(ObjectType type)
         {
+            string baseName = type switch
+            {
+                ObjectType.Room => "Room",
+                ObjectType.Door => "Door",
+                ObjectType.Window => "Window",
+                ObjectType.Table => "Table",
+                ObjectType.Chair => "Chair",
+                _ => "Object"
+            };
             int idx = 1;
-            string baseName = "Room";
-            while (_objects.Exists(o => o.Type == ObjectType.Room && string.Equals(o.Name, $"{baseName} {idx}", StringComparison.OrdinalIgnoreCase)))
+            while (_objects.Exists(o => o.Type == type && string.Equals(o.Name, $"{baseName} {idx}", StringComparison.OrdinalIgnoreCase)))
             {
                 idx++;
             }
