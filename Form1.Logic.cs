@@ -9,7 +9,7 @@ namespace TravFloorPlan
 {
     public partial class MainForm
     {
-        private enum ObjectType { Wall, Door, Window, Table, Chair }
+        private enum ObjectType { Room, Door, Window, Table, Chair }
 
         private class PlacedObject
         {
@@ -30,9 +30,24 @@ namespace TravFloorPlan
         private int _gridSize = 20;
         private bool _snapEnabled = true;
 
+        // Drag/resize state
+        private enum InteractionMode { None, Move, Resize }
+        private InteractionMode _interaction = InteractionMode.None;
+        private Point _dragStart;
+        private Rectangle _originalRect;
+        private ResizeHandle _activeHandle = ResizeHandle.None;
+        private const int HandleSize = 8;
+
+        private enum ResizeHandle
+        {
+            None,
+            N, S, E, W,
+            NE, NW, SE, SW
+        }
+
         private void InitializeFloorPlanUi()
         {
-            paletteListBox.Items.AddRange(new object[] { ObjectType.Wall, ObjectType.Door, ObjectType.Window, ObjectType.Table, ObjectType.Chair });
+            paletteListBox.Items.AddRange(new object[] { ObjectType.Room, ObjectType.Door, ObjectType.Window, ObjectType.Table, ObjectType.Chair });
             paletteListBox.SelectedIndexChanged += (_, __) =>
             {
                 if (paletteListBox.SelectedItem is ObjectType type)
@@ -97,6 +112,10 @@ namespace TravFloorPlan
             {
                 using var selPen = new Pen(Color.Red, 2) { DashStyle = DashStyle.Dash };
                 DrawRotatedRectangle(g, selPen, _selectedObject.Rect, _selectedObject.RotationDegrees);
+                if (Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f) // show handles only for axis-aligned
+                {
+                    DrawResizeHandles(g, _selectedObject.Rect);
+                }
             }
 
             if (_isPlacing && _selectedType.HasValue)
@@ -111,9 +130,54 @@ namespace TravFloorPlan
             }
         }
 
+        private void DrawResizeHandles(Graphics g, Rectangle rect)
+        {
+            using var brush = new SolidBrush(Color.White);
+            using var pen = new Pen(Color.Red);
+            foreach (var handleRect in GetHandleRects(rect))
+            {
+                g.FillRectangle(brush, handleRect);
+                g.DrawRectangle(pen, handleRect);
+            }
+        }
+
+        private IEnumerable<Rectangle> GetHandleRects(Rectangle r)
+        {
+            int hs = HandleSize;
+            yield return new Rectangle(r.Left - hs / 2, r.Top - hs / 2, hs, hs); // NW
+            yield return new Rectangle(r.Right - hs / 2, r.Top - hs / 2, hs, hs); // NE
+            yield return new Rectangle(r.Left - hs / 2, r.Bottom - hs / 2, hs, hs); // SW
+            yield return new Rectangle(r.Right - hs / 2, r.Bottom - hs / 2, hs, hs); // SE
+            yield return new Rectangle(r.Left - hs / 2, r.Top + r.Height / 2 - hs / 2, hs, hs); // W
+            yield return new Rectangle(r.Right - hs / 2, r.Top + r.Height / 2 - hs / 2, hs, hs); // E
+            yield return new Rectangle(r.Left + r.Width / 2 - hs / 2, r.Top - hs / 2, hs, hs); // N
+            yield return new Rectangle(r.Left + r.Width / 2 - hs / 2, r.Bottom - hs / 2, hs, hs); // S
+        }
+
+        private ResizeHandle HitTestHandle(Point p, Rectangle r)
+        {
+            int hs = HandleSize;
+            var map = new Dictionary<ResizeHandle, Rectangle>
+            {
+                { ResizeHandle.NW, new Rectangle(r.Left - hs / 2, r.Top - hs / 2, hs, hs) },
+                { ResizeHandle.NE, new Rectangle(r.Right - hs / 2, r.Top - hs / 2, hs, hs) },
+                { ResizeHandle.SW, new Rectangle(r.Left - hs / 2, r.Bottom - hs / 2, hs, hs) },
+                { ResizeHandle.SE, new Rectangle(r.Right - hs / 2, r.Bottom - hs / 2, hs, hs) },
+                { ResizeHandle.W, new Rectangle(r.Left - hs / 2, r.Top + r.Height / 2 - hs / 2, hs, hs) },
+                { ResizeHandle.E, new Rectangle(r.Right - hs / 2, r.Top + r.Height / 2 - hs / 2, hs, hs) },
+                { ResizeHandle.N, new Rectangle(r.Left + r.Width / 2 - hs / 2, r.Top - hs / 2, hs, hs) },
+                { ResizeHandle.S, new Rectangle(r.Left + r.Width / 2 - hs / 2, r.Bottom - hs / 2, hs, hs) },
+            };
+            foreach (var kv in map)
+            {
+                if (kv.Value.Contains(p)) return kv.Key;
+            }
+            return ResizeHandle.None;
+        }
+
         private void CanvasPanel_MouseClick(object? sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left)
+            if (e.Button == MouseButtons.Left && _interaction == InteractionMode.None)
             {
                 _selectedObject = HitTest(e.Location);
                 propertyGrid.SelectedObject = _selectedObject;
@@ -141,7 +205,6 @@ namespace TravFloorPlan
         private static bool PointInRotatedRect(Point p, Rectangle rect, float degrees)
         {
             var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-            // inverse rotate point around center
             using var path = new GraphicsPath();
             path.AddRectangle(rect);
             var m = new Matrix();
@@ -152,23 +215,108 @@ namespace TravFloorPlan
 
         private void CanvasPanel_MouseDown(object? sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left && _selectedType.HasValue)
+            if (e.Button == MouseButtons.Left)
             {
-                _isPlacing = true;
-                _placeStart = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
-                _lastMouse = _placeStart;
+                // prioritize existing object interactions
+                if (_selectedObject != null && Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f)
+                {
+                    var handle = HitTestHandle(e.Location, _selectedObject.Rect);
+                    if (handle != ResizeHandle.None)
+                    {
+                        _interaction = InteractionMode.Resize;
+                        _activeHandle = handle;
+                        _dragStart = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+                        _originalRect = _selectedObject.Rect;
+                        return;
+                    }
+                    else if (PointInRotatedRect(e.Location, _selectedObject.Rect, _selectedObject.RotationDegrees))
+                    {
+                        _interaction = InteractionMode.Move;
+                        _dragStart = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+                        _originalRect = _selectedObject.Rect;
+                        return;
+                    }
+                }
+
+                if (_selectedType.HasValue)
+                {
+                    _isPlacing = true;
+                    _placeStart = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+                    _lastMouse = _placeStart;
+                }
             }
         }
 
         private void CanvasPanel_MouseMove(object? sender, MouseEventArgs e)
         {
-            _lastMouse = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+            var loc = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
+            _lastMouse = loc;
+
+            if (_interaction == InteractionMode.Move && _selectedObject != null)
+            {
+                int dx = loc.X - _dragStart.X;
+                int dy = loc.Y - _dragStart.Y;
+                var newRect = new Rectangle(_originalRect.X + dx, _originalRect.Y + dy, _originalRect.Width, _originalRect.Height);
+                _selectedObject.Rect = newRect;
+                propertyGrid.Refresh();
+                canvasPanel.Invalidate();
+                return;
+            }
+            else if (_interaction == InteractionMode.Resize && _selectedObject != null)
+            {
+                var r = _originalRect;
+                int dx = loc.X - _dragStart.X;
+                int dy = loc.Y - _dragStart.Y;
+                Rectangle newRect = r;
+                switch (_activeHandle)
+                {
+                    case ResizeHandle.N:
+                        newRect = new Rectangle(r.X, r.Y + dy, r.Width, r.Height - dy);
+                        break;
+                    case ResizeHandle.S:
+                        newRect = new Rectangle(r.X, r.Y, r.Width, r.Height + dy);
+                        break;
+                    case ResizeHandle.W:
+                        newRect = new Rectangle(r.X + dx, r.Y, r.Width - dx, r.Height);
+                        break;
+                    case ResizeHandle.E:
+                        newRect = new Rectangle(r.X, r.Y, r.Width + dx, r.Height);
+                        break;
+                    case ResizeHandle.NW:
+                        newRect = new Rectangle(r.X + dx, r.Y + dy, r.Width - dx, r.Height - dy);
+                        break;
+                    case ResizeHandle.NE:
+                        newRect = new Rectangle(r.X, r.Y + dy, r.Width + dx, r.Height - dy);
+                        break;
+                    case ResizeHandle.SW:
+                        newRect = new Rectangle(r.X + dx, r.Y, r.Width - dx, r.Height + dy);
+                        break;
+                    case ResizeHandle.SE:
+                        newRect = new Rectangle(r.X, r.Y, r.Width + dx, r.Height + dy);
+                        break;
+                }
+                // keep positive dimensions
+                if (newRect.Width < 1) newRect.Width = 1;
+                if (newRect.Height < 1) newRect.Height = 1;
+                _selectedObject.Rect = newRect;
+                propertyGrid.Refresh();
+                canvasPanel.Invalidate();
+                return;
+            }
+
             if (_isPlacing)
                 canvasPanel.Invalidate();
         }
 
         private void CanvasPanel_MouseUp(object? sender, MouseEventArgs e)
         {
+            if (_interaction != InteractionMode.None)
+            {
+                _interaction = InteractionMode.None;
+                _activeHandle = ResizeHandle.None;
+                return;
+            }
+
             if (_isPlacing && e.Button == MouseButtons.Left && _selectedType.HasValue)
             {
                 var end = _snapEnabled ? SnapPoint(e.Location, _gridSize) : e.Location;
@@ -226,7 +374,7 @@ namespace TravFloorPlan
             var rect = obj.Rect;
             switch (obj.Type)
             {
-                case ObjectType.Wall:
+                case ObjectType.Room:
                     using (var pen = new Pen(Color.Black, 4)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
                     break;
                 case ObjectType.Door:
