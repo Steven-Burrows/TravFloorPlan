@@ -17,6 +17,7 @@ namespace TravFloorPlan
             public ObjectType Type { get; set; }
             public Rectangle Rect { get; set; }
             public float RotationDegrees { get; set; }
+            public string? Name { get; set; }
         }
 
         private readonly List<PlacedObject> _objects = new();
@@ -45,6 +46,8 @@ namespace TravFloorPlan
             NE, NW, SE, SW
         }
 
+        private ContextMenuStrip _canvasMenu;
+
         private void InitializeFloorPlanUi()
         {
             paletteListBox.Items.AddRange(new object[] { ObjectType.Room, ObjectType.Door, ObjectType.Window, ObjectType.Table, ObjectType.Chair });
@@ -61,6 +64,15 @@ namespace TravFloorPlan
             this.DoubleBuffered = true;
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
+
+            _canvasMenu = new ContextMenuStrip();
+            var deleteItem = new ToolStripMenuItem("Delete", null, (_, __) => DeleteSelected());
+            _canvasMenu.Items.Add(deleteItem);
+            canvasPanel.ContextMenuStrip = _canvasMenu;
+            _canvasMenu.Opening += (_, e) =>
+            {
+                deleteItem.Enabled = _selectedObject != null;
+            };
         }
 
         protected override void OnLoad(EventArgs e)
@@ -84,6 +96,21 @@ namespace TravFloorPlan
             else if (e.KeyCode == Keys.G)
             {
                 _snapEnabled = !_snapEnabled;
+                canvasPanel.Invalidate();
+            }
+            else if (e.KeyCode == Keys.Delete)
+            {
+                DeleteSelected();
+            }
+        }
+
+        private void DeleteSelected()
+        {
+            if (_selectedObject != null)
+            {
+                _objects.Remove(_selectedObject);
+                _selectedObject = null;
+                propertyGrid.SelectedObject = null;
                 canvasPanel.Invalidate();
             }
         }
@@ -112,7 +139,7 @@ namespace TravFloorPlan
             {
                 using var selPen = new Pen(Color.Red, 2) { DashStyle = DashStyle.Dash };
                 DrawRotatedRectangle(g, selPen, _selectedObject.Rect, _selectedObject.RotationDegrees);
-                if (Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f) // show handles only for axis-aligned
+                if (Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f)
                 {
                     DrawResizeHandles(g, _selectedObject.Rect);
                 }
@@ -144,14 +171,14 @@ namespace TravFloorPlan
         private IEnumerable<Rectangle> GetHandleRects(Rectangle r)
         {
             int hs = HandleSize;
-            yield return new Rectangle(r.Left - hs / 2, r.Top - hs / 2, hs, hs); // NW
-            yield return new Rectangle(r.Right - hs / 2, r.Top - hs / 2, hs, hs); // NE
-            yield return new Rectangle(r.Left - hs / 2, r.Bottom - hs / 2, hs, hs); // SW
-            yield return new Rectangle(r.Right - hs / 2, r.Bottom - hs / 2, hs, hs); // SE
-            yield return new Rectangle(r.Left - hs / 2, r.Top + r.Height / 2 - hs / 2, hs, hs); // W
-            yield return new Rectangle(r.Right - hs / 2, r.Top + r.Height / 2 - hs / 2, hs, hs); // E
-            yield return new Rectangle(r.Left + r.Width / 2 - hs / 2, r.Top - hs / 2, hs, hs); // N
-            yield return new Rectangle(r.Left + r.Width / 2 - hs / 2, r.Bottom - hs / 2, hs, hs); // S
+            yield return new Rectangle(r.Left - hs / 2, r.Top - hs / 2, hs, hs);
+            yield return new Rectangle(r.Right - hs / 2, r.Top - hs / 2, hs, hs);
+            yield return new Rectangle(r.Left - hs / 2, r.Bottom - hs / 2, hs, hs);
+            yield return new Rectangle(r.Right - hs / 2, r.Bottom - hs / 2, hs, hs);
+            yield return new Rectangle(r.Left - hs / 2, r.Top + r.Height / 2 - hs / 2, hs, hs);
+            yield return new Rectangle(r.Right - hs / 2, r.Top + r.Height / 2 - hs / 2, hs, hs);
+            yield return new Rectangle(r.Left + r.Width / 2 - hs / 2, r.Top - hs / 2, hs, hs);
+            yield return new Rectangle(r.Left + r.Width / 2 - hs / 2, r.Bottom - hs / 2, hs, hs);
         }
 
         private ResizeHandle HitTestHandle(Point p, Rectangle r)
@@ -193,7 +220,7 @@ namespace TravFloorPlan
 
         private PlacedObject? HitTest(Point location)
         {
-            for (int i = _objects.Count - 1; i >= 0; i--) // topmost first
+            for (int i = _objects.Count - 1; i >= 0; i--)
             {
                 var obj = _objects[i];
                 if (PointInRotatedRect(location, obj.Rect, obj.RotationDegrees))
@@ -217,7 +244,6 @@ namespace TravFloorPlan
         {
             if (e.Button == MouseButtons.Left)
             {
-                // prioritize existing object interactions
                 if (_selectedObject != null && Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f)
                 {
                     var handle = HitTestHandle(e.Location, _selectedObject.Rect);
@@ -295,7 +321,6 @@ namespace TravFloorPlan
                         newRect = new Rectangle(r.X, r.Y, r.Width + dx, r.Height + dy);
                         break;
                 }
-                // keep positive dimensions
                 if (newRect.Width < 1) newRect.Width = 1;
                 if (newRect.Height < 1) newRect.Height = 1;
                 _selectedObject.Rect = newRect;
@@ -328,6 +353,10 @@ namespace TravFloorPlan
                 if (rect.Width > 4 && rect.Height > 4)
                 {
                     var obj = new PlacedObject { Type = _selectedType.Value, Rect = rect, RotationDegrees = _currentRotation };
+                    if (obj.Type == ObjectType.Room && string.IsNullOrWhiteSpace(obj.Name))
+                    {
+                        obj.Name = GenerateDefaultRoomName();
+                    }
                     _objects.Add(obj);
                     _selectedObject = obj;
                     propertyGrid.SelectedObject = _selectedObject;
@@ -335,6 +364,17 @@ namespace TravFloorPlan
                 }
             }
             _isPlacing = false;
+        }
+
+        private string GenerateDefaultRoomName()
+        {
+            int idx = 1;
+            string baseName = "Room";
+            while (_objects.Exists(o => o.Type == ObjectType.Room && string.Equals(o.Name, $"{baseName} {idx}", StringComparison.OrdinalIgnoreCase)))
+            {
+                idx++;
+            }
+            return $"{baseName} {idx}";
         }
 
         private static Rectangle GetCurrentRect(Point start, Point end)
@@ -376,6 +416,13 @@ namespace TravFloorPlan
             {
                 case ObjectType.Room:
                     using (var pen = new Pen(Color.Black, 4)) DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
+                    // draw name centered inside the room
+                    if (!string.IsNullOrWhiteSpace(obj.Name))
+                    {
+                        using var f = new Font("Segoe UI", 10f, FontStyle.Bold);
+                        var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+                        g.DrawString(obj.Name, f, Brushes.Black, new RectangleF(rect.X, rect.Y, rect.Width, rect.Height), format);
+                    }
                     break;
                 case ObjectType.Door:
                     using (var brush = new SolidBrush(Color.SaddleBrown)) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
