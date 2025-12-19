@@ -137,7 +137,7 @@ namespace TravFloorPlan
                 pasteItem.Enabled = _clipboardObject != null;
                 rotateLeftItem.Enabled = hasSelection;
                 rotateRightItem.Enabled = hasSelection;
-                mirrorItem.Enabled = hasSelection && _selectedObject!.Type == ObjectType.TriangularRoom;
+                mirrorItem.Enabled = hasSelection && (_selectedObject!.Type == ObjectType.TriangleRight || _selectedObject!.Type == ObjectType.TriangleIso);
                 deleteItem.Enabled = hasSelection;
             };
 
@@ -487,7 +487,7 @@ namespace TravFloorPlan
         private void ToggleMirrorSelected()
         {
             if (_selectedObject == null) return;
-            if (_selectedObject.Type != ObjectType.TriangularRoom) return;
+            if (_selectedObject.Type != ObjectType.TriangleRight && _selectedObject.Type != ObjectType.TriangleIso) return;
             _selectedObject.Mirrored = !_selectedObject.Mirrored;
             propertyGrid.Refresh();
             canvasPanel.Invalidate();
@@ -757,12 +757,12 @@ namespace TravFloorPlan
                     DrawRotatedEllipse(g, penC, rect, obj.RotationDegrees);
                 DrawRoomText(g, obj, rect, gridSize);
             }
-            else if (obj.Type == ObjectType.TriangularRoom)
+            else if (obj.Type == ObjectType.TriangleRight || obj.Type == ObjectType.TriangleIso)
             {
                 if (obj.BackgroundColor.A > 0)
-                    FillRotatedTriangle(g, new SolidBrush(semi), rect, obj.RotationDegrees, obj.Mirrored);
+                    FillRotatedTriangle(g, new SolidBrush(semi), rect, obj.RotationDegrees, obj.Mirrored, obj.Type);
                 using (var penT = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
-                    DrawRotatedTriangle(g, penT, rect, obj.RotationDegrees, obj.Mirrored);
+                    DrawRotatedTriangle(g, penT, rect, obj.RotationDegrees, obj.Mirrored, obj.Type);
                 DrawRoomText(g, obj, rect, gridSize);
             }
             else if (obj.Type == ObjectType.Door)
@@ -877,26 +877,30 @@ namespace TravFloorPlan
             g.Restore(state);
         }
 
-        private static void DrawRotatedTriangle(Graphics g, Pen pen, Rectangle rect, float degrees, bool mirrored)
+        private static void DrawRotatedTriangle(Graphics g, Pen pen, Rectangle rect, float degrees, bool mirrored, ObjectType type)
         {
             var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
             var state = g.Save();
             g.TranslateTransform(center.X, center.Y);
             g.RotateTransform(degrees);
             g.TranslateTransform(-center.X, -center.Y);
-            var pts = GetTrianglePoints(rect, mirrored);
+            var pts = (type == ObjectType.TriangleIso)
+                ? ObjectType.GetTriangleIsoPoints(rect, mirrored)
+                : ObjectType.GetTrianglePoints(rect, mirrored);
             g.DrawPolygon(pen, pts);
             g.Restore(state);
         }
 
-        private static void FillRotatedTriangle(Graphics g, Brush brush, Rectangle rect, float degrees, bool mirrored)
+        private static void FillRotatedTriangle(Graphics g, Brush brush, Rectangle rect, float degrees, bool mirrored, ObjectType type)
         {
             var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
             var state = g.Save();
             g.TranslateTransform(center.X, center.Y);
             g.RotateTransform(degrees);
             g.TranslateTransform(-center.X, -center.Y);
-            var pts = GetTrianglePoints(rect, mirrored);
+            var pts = (type == ObjectType.TriangleIso)
+                ? ObjectType.GetTriangleIsoPoints(rect, mirrored)
+                : ObjectType.GetTrianglePoints(rect, mirrored);
             g.FillPolygon(brush, pts);
             g.Restore(state);
         }

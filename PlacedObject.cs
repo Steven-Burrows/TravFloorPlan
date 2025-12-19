@@ -45,7 +45,7 @@ namespace TravFloorPlan
                     return w * h;
                 if (Type == ObjectType.CircularRoom)
                     return (float)(System.Math.PI * 0.25 * w * h);
-                if (Type == ObjectType.TriangularRoom)
+                if (Type == ObjectType.TriangleRight || Type == ObjectType.TriangleIso)
                     return 0.5f * w * h;
                 return w * h;
             }

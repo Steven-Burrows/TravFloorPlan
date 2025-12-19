@@ -14,7 +14,8 @@ namespace TravFloorPlan
 
         public static readonly ObjectType Room = new ObjectType("Room", ObjectGroup.Rooms);
         public static readonly ObjectType CircularRoom = new ObjectType("CircularRoom", ObjectGroup.Rooms);
-        public static readonly ObjectType TriangularRoom = new ObjectType("TriangularRoom", ObjectGroup.Rooms);
+        public static readonly ObjectType TriangleRight = new ObjectType("TriangleRight", ObjectGroup.Rooms);
+        public static readonly ObjectType TriangleIso = new ObjectType("TriangleIso", ObjectGroup.Rooms);
         public static readonly ObjectType Door = new ObjectType("Door", ObjectGroup.Doorways);
         public static readonly ObjectType Window = new ObjectType("Window", ObjectGroup.Others);
         public static readonly ObjectType Table = new ObjectType("Table", ObjectGroup.Others);
@@ -22,7 +23,7 @@ namespace TravFloorPlan
 
         public static IEnumerable<ObjectType> AllTypes()
         {
-            yield return Room; yield return CircularRoom; yield return TriangularRoom;
+            yield return Room; yield return CircularRoom; yield return TriangleRight; yield return TriangleIso;
             yield return Door; yield return Window; yield return Table; yield return Chair;
         }
 
@@ -33,7 +34,7 @@ namespace TravFloorPlan
 
         public string GetDefaultBaseName()
         {
-            if (this == Room || this == CircularRoom || this == TriangularRoom) return "Room";
+            if (this == Room || this == CircularRoom || this == TriangleRight || this == TriangleIso) return "Room";
             if (this == Door) return "Door";
             if (this == Window) return "Window";
             if (this == Table) return "Table";
@@ -48,7 +49,7 @@ namespace TravFloorPlan
             float h = rect.Height / (float)gridSize;
             if (this == Room) return w * h;
             if (this == CircularRoom) return (float)(Math.PI * 0.25 * w * h);
-            if (this == TriangularRoom) return 0.5f * w * h;
+            if (this == TriangleRight || this == TriangleIso) return 0.5f * w * h;
             return 0f;
         }
 
@@ -63,9 +64,14 @@ namespace TravFloorPlan
             {
                 path.AddEllipse(rect);
             }
-            else if (this == TriangularRoom)
+            else if (this == TriangleRight)
             {
                 var pts = GetTrianglePoints(rect, mirrored);
+                path.AddPolygon(pts);
+            }
+            else if (this == TriangleIso)
+            {
+                var pts = GetTriangleIsoPoints(rect, mirrored);
                 path.AddPolygon(pts);
             }
             else
@@ -93,6 +99,31 @@ namespace TravFloorPlan
                     new Point(rect.Right, rect.Bottom),
                     new Point(rect.Right, rect.Top),
                     new Point(rect.Left, rect.Top)
+                };
+            }
+        }
+
+        public static Point[] GetTriangleIsoPoints(Rectangle rect, bool mirrored)
+        {
+            int midX = rect.Left + rect.Width / 2;
+            if (!mirrored)
+            {
+                // Apex at top center, base along bottom edge
+                return new[]
+                {
+                    new Point(rect.Left, rect.Bottom),
+                    new Point(midX, rect.Top),
+                    new Point(rect.Right, rect.Bottom)
+                };
+            }
+            else
+            {
+                // Apex at bottom center, base along top edge (mirrored vertically)
+                return new[]
+                {
+                    new Point(rect.Left, rect.Top),
+                    new Point(midX, rect.Bottom),
+                    new Point(rect.Right, rect.Top)
                 };
             }
         }
