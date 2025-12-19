@@ -1039,5 +1039,20 @@ namespace TravFloorPlan
             for (float y = top; y <= bottom; y += grid)
                 g.DrawLine(pen, left, y, right, y);
         }
+
+        // High-performance drawing surface to reduce flicker
+        private class DoubleBufferedPanel : Panel
+        {
+            public DoubleBufferedPanel()
+            {
+                this.DoubleBuffered = true;
+                this.SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+                this.UpdateStyles();
+            }
+            protected override void OnPaintBackground(PaintEventArgs e)
+            {
+                // Avoid background erase to reduce flicker; we clear in our paint pipeline
+            }
+        }
     }
 }
