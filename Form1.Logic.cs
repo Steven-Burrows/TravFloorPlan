@@ -256,7 +256,7 @@ namespace TravFloorPlan
             double totalRoomArea = 0;
             foreach (var o in _objects)
             {
-                if (o.Type == ObjectType.Room || o.Type == ObjectType.CircularRoom || o.Type == ObjectType.TriangularRoom)
+                if (o.Type.Group == ObjectGroup.Rooms)
                 {
                     rooms++;
                     int g = _gridSize > 0 ? _gridSize : 1;
