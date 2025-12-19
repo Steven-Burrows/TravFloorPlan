@@ -216,35 +216,11 @@ namespace TravFloorPlan
             UpdateSummaryPanel();
         }
 
-        private void UpdateSummaryPanel()
+        private static float NormalizeAngle(float deg)
         {
-            if (_summaryLabel == null) return;
-            int roomsCount = 0, doorwaysCount = 0, othersCount = 0;
-            double totalRoomArea = 0;
-            foreach (var o in _objects)
-            {
-                if (o.Type.Group == ObjectGroup.Rooms)
-                {
-                    roomsCount++;
-                    int g = _gridSize > 0 ? _gridSize : 1;
-                    double w = o.Rect.Width / (double)g;
-                    double h = o.Rect.Height / (double)g;
-                    double a = o.Type == ObjectType.Room ? w * h : o.Type == ObjectType.CircularRoom ? Math.PI * 0.25 * w * h : 0.5 * w * h;
-                    totalRoomArea += a;
-                }
-                else if (o.Type.Group == ObjectGroup.Doorways)
-                {
-                    doorwaysCount++;
-                }
-                else
-                {
-                    othersCount++;
-                }
-            }
-            _summaryLabel.Text =
-                "Summary\r\n" +
-                $"Rooms: {roomsCount}    Doorways: {doorwaysCount}    Others: {othersCount}\r\n" +
-                $"Total room area (grid): {totalRoomArea:0.#}";
+            deg %= 360f;
+            if (deg < 0) deg += 360f;
+            return deg;
         }
 
         private void RotateSelected(float deltaDegrees)
@@ -347,13 +323,6 @@ namespace TravFloorPlan
                 RefreshPaletteList();
                 UpdateSummaryPanel();
             }
-        }
-
-        private static float NormalizeAngle(float deg)
-        {
-            deg %= 360f;
-            if (deg < 0) deg += 360f;
-            return deg;
         }
 
         private void CanvasPanel_Paint(object? sender, PaintEventArgs e)
@@ -502,24 +471,8 @@ namespace TravFloorPlan
         {
             var rect = obj.Rect;
             var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-            var path = new GraphicsPath();
-            if (obj.Type == ObjectType.Room)
-            {
-                path.AddRectangle(rect);
-            }
-            else if (obj.Type == ObjectType.CircularRoom)
-            {
-                path.AddEllipse(rect);
-            }
-            else if (obj.Type == ObjectType.TriangularRoom)
-            {
-                var tpts = GetTrianglePoints(rect, obj.Mirrored);
-                path.AddPolygon(tpts);
-            }
-            else
-            {
-                path.AddRectangle(rect);
-            }
+            using var basePath = obj.Type.CreateUnrotatedPath(rect, obj.Mirrored);
+            var path = (GraphicsPath)basePath.Clone();
             using var m = new Matrix();
             m.RotateAt(obj.RotationDegrees, center);
             path.Transform(m);
@@ -528,24 +481,7 @@ namespace TravFloorPlan
 
         private static Point[] GetTrianglePoints(Rectangle rect, bool mirrored)
         {
-            if (!mirrored)
-            {
-                return new[]
-                {
-                    new Point(rect.Left, rect.Bottom),
-                    new Point(rect.Left, rect.Top),
-                    new Point(rect.Right, rect.Top)
-                };
-            }
-            else
-            {
-                return new[]
-                {
-                    new Point(rect.Right, rect.Bottom),
-                    new Point(rect.Right, rect.Top),
-                    new Point(rect.Left, rect.Top)
-                };
-            }
+            return ObjectType.GetTrianglePoints(rect, mirrored);
         }
 
         private void ToggleMirrorSelected()
@@ -733,7 +669,6 @@ namespace TravFloorPlan
                 {
                     var obj = new PlacedObject { Type = _selectedType, Rect = rect, RotationDegrees = _currentRotation, GridSizeForArea = _gridSize };
 
-
                     if (string.IsNullOrWhiteSpace(obj.Name))
                     {
                         obj.Name = GenerateDefaultName(obj.Type);
@@ -765,23 +700,11 @@ namespace TravFloorPlan
             canvasPanel.Invalidate();
         }
 
-        private int GetSnapSizeFor(ObjectType type) => (type == ObjectType.Door) ? Math.Max(1, _gridSize / 2) : _gridSize;
+        private int GetSnapSizeFor(ObjectType type) => type.GetSnapSize(_gridSize);
 
         private string GenerateDefaultName(ObjectType type)
         {
-            string baseName;
-            if (type == ObjectType.Room || type == ObjectType.CircularRoom || type == ObjectType.TriangularRoom)
-                baseName = "Room";
-            else if (type == ObjectType.Door)
-                baseName = "Door";
-            else if (type == ObjectType.Window)
-                baseName = "Window";
-            else if (type == ObjectType.Table)
-                baseName = "Table";
-            else if (type == ObjectType.Chair)
-                baseName = "Chair";
-            else baseName = "Object";
-
+            string baseName = type.GetDefaultBaseName();
             int idx = 1;
             while (_objects.Exists(o => o.Type == type && string.Equals(o.Name, $"{baseName} {idx}", StringComparison.OrdinalIgnoreCase)))
             {
@@ -868,23 +791,7 @@ namespace TravFloorPlan
             if (string.IsNullOrWhiteSpace(obj.Name)) return;
             using var nameFont = new Font("Segoe UI", 10f, FontStyle.Bold);
             using var areaFont = new Font("Segoe UI", 8f, FontStyle.Regular);
-            float areaUnits;
-            if (obj.Type == ObjectType.Room)
-            {
-                areaUnits = (rect.Width / (float)gridSize) * (rect.Height / (float)gridSize);
-            }
-            else if (obj.Type == ObjectType.CircularRoom)
-            {
-                areaUnits = (float)(Math.PI * 0.25 * (rect.Width / (float)gridSize) * (rect.Height / (float)gridSize));
-            }
-            else if (obj.Type == ObjectType.TriangularRoom)
-            {
-                areaUnits = 0.5f * (rect.Width / (float)gridSize) * (rect.Height / (float)gridSize);
-            }
-            else
-            {
-                areaUnits = 0f;
-            }
+            float areaUnits = obj.Type.ComputeAreaUnits(rect, gridSize);
             string areaText = $"{areaUnits:0.#}";
             var nameSize = g.MeasureString(obj.Name, nameFont);
             var areaSize = g.MeasureString(areaText, areaFont);
@@ -1020,6 +927,33 @@ namespace TravFloorPlan
             {
                 // Avoid background erase to reduce flicker; we clear in our paint pipeline
             }
+        }
+
+        private void UpdateSummaryPanel()
+        {
+            if (_summaryLabel == null) return;
+            int roomsCount = 0, doorwaysCount = 0, othersCount = 0;
+            double totalRoomArea = 0;
+            foreach (var o in _objects)
+            {
+                if (o.Type.Group == ObjectGroup.Rooms)
+                {
+                    roomsCount++;
+                    totalRoomArea += o.Type.ComputeAreaUnits(o.Rect, _gridSize);
+                }
+                else if (o.Type.Group == ObjectGroup.Doorways)
+                {
+                    doorwaysCount++;
+                }
+                else
+                {
+                    othersCount++;
+                }
+            }
+            _summaryLabel.Text =
+                "Summary\r\n" +
+                $"Rooms: {roomsCount}    Doorways: {doorwaysCount}    Others: {othersCount}\r\n" +
+                $"Total room area (grid): {totalRoomArea:0.#}";
         }
     }
 }
