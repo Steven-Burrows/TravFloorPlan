@@ -252,28 +252,31 @@ namespace TravFloorPlan
         private void UpdateSummaryPanel()
         {
             if (_summaryLabel == null) return;
-            int rooms = 0, doors = 0, windows = 0, tables = 0, chairs = 0;
+            int roomsCount = 0, doorwaysCount = 0, othersCount = 0;
             double totalRoomArea = 0;
             foreach (var o in _objects)
             {
                 if (o.Type.Group == ObjectGroup.Rooms)
                 {
-                    rooms++;
+                    roomsCount++;
                     int g = _gridSize > 0 ? _gridSize : 1;
                     double w = o.Rect.Width / (double)g;
                     double h = o.Rect.Height / (double)g;
                     double a = o.Type == ObjectType.Room ? w * h : o.Type == ObjectType.CircularRoom ? Math.PI * 0.25 * w * h : 0.5 * w * h;
                     totalRoomArea += a;
                 }
-                else if (o.Type == ObjectType.Door) doors++;
-                else if (o.Type == ObjectType.Window) windows++;
-                else if (o.Type == ObjectType.Table) tables++;
-                else if (o.Type == ObjectType.Chair) chairs++;
+                else if (o.Type.Group == ObjectGroup.Doorways)
+                {
+                    doorwaysCount++;
+                }
+                else
+                {
+                    othersCount++;
+                }
             }
             _summaryLabel.Text =
                 "Summary\r\n" +
-                $"Rooms: {rooms}    Doors: {doors}\r\n" +
-                $"Windows: {windows}    Tables: {tables}    Chairs: {chairs}\r\n" +
+                $"Rooms: {roomsCount}    Doorways: {doorwaysCount}    Others: {othersCount}\r\n" +
                 $"Total room area (grid): {totalRoomArea:0.#}";
         }
 
