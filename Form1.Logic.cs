@@ -10,39 +10,6 @@ namespace TravFloorPlan
 {
     public partial class MainForm
     {
-        public class ObjectGroup
-        {
-            public string Name { get; }
-            private ObjectGroup(string name) { Name = name; }
-            public override string ToString() => Name;
-
-            public static readonly ObjectGroup Rooms = new ObjectGroup("Rooms");
-            public static readonly ObjectGroup Doorways = new ObjectGroup("Doorways");
-            public static readonly ObjectGroup Others = new ObjectGroup("Others");
-        }
-
-        public class ObjectType
-        {
-            public string Name { get; }
-            public ObjectGroup Group { get; }
-            private ObjectType(string name, ObjectGroup group) { Name = name; Group = group; }
-            public override string ToString() => Name;
-
-            public static readonly ObjectType Room = new ObjectType("Room", ObjectGroup.Rooms);
-            public static readonly ObjectType CircularRoom = new ObjectType("CircularRoom", ObjectGroup.Rooms);
-            public static readonly ObjectType TriangularRoom = new ObjectType("TriangularRoom", ObjectGroup.Rooms);
-            public static readonly ObjectType Door = new ObjectType("Door", ObjectGroup.Doorways);
-            public static readonly ObjectType Window = new ObjectType("Window", ObjectGroup.Others);
-            public static readonly ObjectType Table = new ObjectType("Table", ObjectGroup.Others);
-            public static readonly ObjectType Chair = new ObjectType("Chair", ObjectGroup.Others);
-
-            public static IEnumerable<ObjectType> AllTypes()
-            {
-                yield return Room; yield return CircularRoom; yield return TriangularRoom;
-                yield return Door; yield return Window; yield return Table; yield return Chair;
-            }
-        }
-
         private readonly Plan _plan = new Plan();
         private List<PlacedObject> _objects => _plan.Objects;
 

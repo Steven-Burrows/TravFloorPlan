@@ -4,8 +4,6 @@ using System.Drawing;
 
 namespace TravFloorPlan
 {
-    using ObjectType = TravFloorPlan.MainForm.ObjectType;
-
     public class PlacedObject
     {
         [Browsable(false)]
