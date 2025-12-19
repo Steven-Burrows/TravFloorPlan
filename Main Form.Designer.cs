@@ -38,6 +38,12 @@
             zoomInToolStripMenuItem = new ToolStripMenuItem();
             zoomOutToolStripMenuItem = new ToolStripMenuItem();
             resetZoomToolStripMenuItem = new ToolStripMenuItem();
+            fileToolStripMenuItem = new ToolStripMenuItem();
+            newPlanToolStripMenuItem = new ToolStripMenuItem();
+            openPlanToolStripMenuItem = new ToolStripMenuItem();
+            savePlanToolStripMenuItem = new ToolStripMenuItem();
+            saveAsPlanToolStripMenuItem = new ToolStripMenuItem();
+            exitToolStripMenuItem = new ToolStripMenuItem();
             ((System.ComponentModel.ISupportInitialize)splitContainer).BeginInit();
             splitContainer.Panel1.SuspendLayout();
             splitContainer.Panel2.SuspendLayout();
@@ -115,6 +121,27 @@
             // 
             menuStrip.ImageScalingSize = new Size(20, 20);
             menuStrip.Items.AddRange(new ToolStripItem[] { viewToolStripMenuItem });
+            // add File menu with plan actions
+            fileToolStripMenuItem = new ToolStripMenuItem();
+            newPlanToolStripMenuItem = new ToolStripMenuItem();
+            openPlanToolStripMenuItem = new ToolStripMenuItem();
+            savePlanToolStripMenuItem = new ToolStripMenuItem();
+            saveAsPlanToolStripMenuItem = new ToolStripMenuItem();
+            exitToolStripMenuItem = new ToolStripMenuItem();
+            fileToolStripMenuItem.Name = "fileToolStripMenuItem";
+            fileToolStripMenuItem.Text = "File";
+            newPlanToolStripMenuItem.Text = "New";
+            openPlanToolStripMenuItem.Text = "Open";
+            savePlanToolStripMenuItem.Text = "Save";
+            saveAsPlanToolStripMenuItem.Text = "Save As";
+            exitToolStripMenuItem.Text = "Exit";
+            newPlanToolStripMenuItem.Click += MenuFile_New_Click;
+            openPlanToolStripMenuItem.Click += MenuFile_Open_Click;
+            savePlanToolStripMenuItem.Click += MenuFile_Save_Click;
+            saveAsPlanToolStripMenuItem.Click += MenuFile_SaveAs_Click;
+            exitToolStripMenuItem.Click += MenuFile_Exit_Click;
+            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { newPlanToolStripMenuItem, openPlanToolStripMenuItem, savePlanToolStripMenuItem, saveAsPlanToolStripMenuItem, new ToolStripSeparator(), exitToolStripMenuItem });
+            menuStrip.Items.Insert(0, fileToolStripMenuItem);
             menuStrip.Location = new Point(0, 0);
             menuStrip.Name = "menuStrip";
             menuStrip.Size = new Size(1200, 24);
@@ -182,5 +209,11 @@
         private System.Windows.Forms.ToolStripMenuItem zoomInToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem zoomOutToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem resetZoomToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem fileToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem newPlanToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem openPlanToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem savePlanToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem saveAsPlanToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem exitToolStripMenuItem;
     }
 }
