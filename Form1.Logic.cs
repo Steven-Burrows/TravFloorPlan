@@ -665,6 +665,11 @@ namespace TravFloorPlan
                 {
                     rect = SnapRect(rect, GetSnapSizeFor(_selectedType));
                 }
+                // Force door size to 1x1 grid units
+                if (_selectedType == ObjectType.Door)
+                {
+                    rect = new Rectangle(end.X, end.Y, _gridSize, _gridSize);
+                }
                 if (rect.Width > 4 && rect.Height > 4)
                 {
                     var obj = new PlacedObject { Type = _selectedType, Rect = rect, RotationDegrees = _currentRotation, GridSizeForArea = _gridSize };
