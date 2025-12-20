@@ -704,6 +704,12 @@ namespace TravFloorPlan
 
         private string GenerateDefaultName(ObjectType type)
         {
+            if (type.Group == ObjectGroup.Rooms)
+            {
+                int roomsCount = _objects.Count(o => o.Type.Group == ObjectGroup.Rooms);
+                return $"{roomsCount + 1}";
+            }
+
             string baseName = type.GetDefaultBaseName();
             int idx = 1;
             while (_objects.Exists(o => o.Type == type && string.Equals(o.Name, $"{baseName} {idx}", StringComparison.OrdinalIgnoreCase)))
