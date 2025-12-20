@@ -665,8 +665,8 @@ namespace TravFloorPlan
                 {
                     rect = SnapRect(rect, GetSnapSizeFor(_selectedType));
                 }
-                // Force door size to 1x1 grid units
-                if (_selectedType == ObjectType.Door)
+                // Force door/opening size to 1x1 grid units
+                if (_selectedType == ObjectType.Door || _selectedType == ObjectType.Opening)
                 {
                     rect = new Rectangle(end.X, end.Y, _gridSize, _gridSize);
                 }
@@ -779,6 +779,31 @@ namespace TravFloorPlan
             else if (obj.Type == ObjectType.Door)
             {
                 // handled later
+            }
+            else if (obj.Type == ObjectType.Opening)
+            {
+                // erase underlying lines (not grid) with a thick white stroke in the rect center
+                var center = new Point(rect.Left + rect.Width / 2, rect.Top + rect.Height / 2);
+                using var erasePen = new Pen(Color.White, Math.Max(6, obj.LineWidth));
+                var state = g.Save();
+                var c = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+                g.TranslateTransform(c.X, c.Y);
+                g.RotateTransform(obj.RotationDegrees);
+                g.TranslateTransform(-c.X, -c.Y);
+                int y = center.Y;
+                int x1 = rect.Left;
+                int x2 = rect.Right;
+                int barSize = Math.Min(rect.Height, 10);
+                g.DrawLine(erasePen, x1, y - barSize / 2, x1, y + barSize / 2);
+                g.DrawLine(erasePen, x2, y - barSize / 2, x2, y + barSize / 2);
+                g.DrawLine(erasePen, x1, y, x2, y);
+                g.Restore(state);
+
+                // redraw grid lines within the opening bounds to keep grid visible
+                var clipState = g.Save();
+                g.SetClip(new RectangleF(rect.Left, rect.Top, rect.Width, rect.Height), CombineMode.Replace);
+                DrawGridWorld(g, new RectangleF(rect.Left, rect.Top, rect.Width, rect.Height), gridSize);
+                g.Restore(clipState);
             }
             else if (obj.Type == ObjectType.Window)
             {

@@ -17,6 +17,7 @@ namespace TravFloorPlan
         public static readonly ObjectType TriangleRight = new ObjectType("TriangleRight", ObjectGroup.Rooms);
         public static readonly ObjectType TriangleIso = new ObjectType("TriangleIso", ObjectGroup.Rooms);
         public static readonly ObjectType Door = new ObjectType("Door", ObjectGroup.Doorways);
+        public static readonly ObjectType Opening = new ObjectType("Opening", ObjectGroup.Doorways);
         public static readonly ObjectType Window = new ObjectType("Window", ObjectGroup.Others);
         public static readonly ObjectType Table = new ObjectType("Table", ObjectGroup.Others);
         public static readonly ObjectType Chair = new ObjectType("Chair", ObjectGroup.Others);
@@ -24,18 +25,19 @@ namespace TravFloorPlan
         public static IEnumerable<ObjectType> AllTypes()
         {
             yield return Room; yield return CircularRoom; yield return TriangleRight; yield return TriangleIso;
-            yield return Door; yield return Window; yield return Table; yield return Chair;
+            yield return Door; yield return Opening; yield return Window; yield return Table; yield return Chair;
         }
 
         public int GetSnapSize(int gridSize)
         {
-            return this == Door ? Math.Max(1, gridSize / 2) : gridSize;
+            return (this == Door || this == Opening) ? Math.Max(1, gridSize / 2) : gridSize;
         }
 
         public string GetDefaultBaseName()
         {
             if (this == Room || this == CircularRoom || this == TriangleRight || this == TriangleIso) return "Room";
             if (this == Door) return "Door";
+            if (this == Opening) return "Opening";
             if (this == Window) return "Window";
             if (this == Table) return "Table";
             if (this == Chair) return "Chair";
