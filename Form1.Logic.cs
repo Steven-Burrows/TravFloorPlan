@@ -12,6 +12,31 @@ namespace TravFloorPlan
     {
         private readonly Plan _plan = new Plan();
         private List<PlacedObject> _objects => _plan.Objects;
+        private readonly Stack<List<PlacedObject>> _undoStack = new Stack<List<PlacedObject>>();
+
+        private void PushUndo()
+        {
+            // Snapshot clone of current objects
+            var snapshot = new List<PlacedObject>(_objects.Count);
+            foreach (var o in _objects)
+            {
+                snapshot.Add(CloneObject(o));
+            }
+            _undoStack.Push(snapshot);
+        }
+
+        private void Undo()
+        {
+            if (_undoStack.Count == 0) return;
+            var snapshot = _undoStack.Pop();
+            _objects.Clear();
+            _objects.AddRange(snapshot);
+            _selectedObject = null;
+            propertyGrid.SelectedObject = null;
+            canvasPanel.Invalidate();
+            RefreshPaletteList();
+            UpdateSummaryPanel();
+        }
 
         private static ObjectGroup GetGroupForType(ObjectTypeBase type) => type.Group;
         private static ObjectTypeBase GetDefaultTypeForGroup(ObjectGroup group)
@@ -121,6 +146,7 @@ namespace TravFloorPlan
             this.KeyDown += Form1_KeyDown;
 
             _canvasMenu = new ContextMenuStrip();
+            var undoItem = new ToolStripMenuItem("Undo", null, (_, __) => Undo());
             var copyItem = new ToolStripMenuItem("Copy", null, (_, __) => CopySelected());
             var pasteItem = new ToolStripMenuItem("Paste", null, (_, __) => PasteClipboard());
             var rotateLeftItem = new ToolStripMenuItem("Rotate Left 90", null, (_, __) => RotateSelected(-90f));
@@ -128,11 +154,12 @@ namespace TravFloorPlan
             var mirrorItem = new ToolStripMenuItem("Mirror (Triangle)", null, (_, __) => ToggleMirrorSelected());
             var deleteItem = new ToolStripMenuItem("Delete", null, (_, __) => DeleteSelected());
             var panItem = new ToolStripMenuItem("Pan", null, (_, __) => { paletteListBox.ClearSelected(); _selectedType = null; });
-            _canvasMenu.Items.AddRange(new ToolStripItem[] { panItem, new ToolStripSeparator(), copyItem, pasteItem, new ToolStripSeparator(), rotateLeftItem, rotateRightItem, mirrorItem, new ToolStripSeparator(), deleteItem });
+            _canvasMenu.Items.AddRange(new ToolStripItem[] { panItem, new ToolStripSeparator(), undoItem, new ToolStripSeparator(), copyItem, pasteItem, new ToolStripSeparator(), rotateLeftItem, rotateRightItem, mirrorItem, new ToolStripSeparator(), deleteItem });
             canvasPanel.ContextMenuStrip = _canvasMenu;
             _canvasMenu.Opening += (_, e) =>
             {
                 bool hasSelection = _selectedObject != null;
+                undoItem.Enabled = _undoStack.Count > 0;
                 copyItem.Enabled = hasSelection;
                 pasteItem.Enabled = _clipboardObject != null;
                 rotateLeftItem.Enabled = hasSelection;
@@ -140,6 +167,29 @@ namespace TravFloorPlan
                 mirrorItem.Enabled = hasSelection && (_selectedObject!.Type == ObjectTypes.TriangleRight || _selectedObject!.Type == ObjectTypes.TriangleIso);
                 deleteItem.Enabled = hasSelection;
             };
+
+            // Add Undo to main menu under an Edit menu if available
+            if (this.MainMenuStrip != null)
+            {
+                // Find existing Edit menu or create one
+                ToolStripMenuItem? editMenu = null;
+                foreach (ToolStripItem item in this.MainMenuStrip.Items)
+                {
+                    if (item is ToolStripMenuItem mi && string.Equals(mi.Text, "Edit", StringComparison.OrdinalIgnoreCase))
+                    {
+                        editMenu = mi;
+                        break;
+                    }
+                }
+                if (editMenu == null)
+                {
+                    editMenu = new ToolStripMenuItem("Edit");
+                    this.MainMenuStrip.Items.Add(editMenu);
+                }
+                var undoMainItem = new ToolStripMenuItem("Undo", null, (_, __) => Undo());
+                editMenu.DropDownOpening += (_, __) => { undoMainItem.Enabled = _undoStack.Count > 0; };
+                editMenu.DropDownItems.Add(undoMainItem);
+            }
 
             _summaryPanel = new Panel { Dock = DockStyle.Bottom, Height = 70, Padding = new Padding(6) };
             _summaryLabel = new Label { Dock = DockStyle.Fill, AutoSize = false, TextAlign = ContentAlignment.TopLeft };
@@ -245,6 +295,12 @@ namespace TravFloorPlan
                 e.Handled = true;
                 return;
             }
+            if (e.Control && e.KeyCode == Keys.Z)
+            {
+                Undo();
+                e.Handled = true;
+                return;
+            }
             if (e.Control && e.KeyCode == Keys.V)
             {
                 PasteClipboard();
@@ -281,6 +337,7 @@ namespace TravFloorPlan
         private void PasteClipboard()
         {
             if (_clipboardObject == null) return;
+           PushUndo();
             var obj = CloneObject(_clipboardObject);
             var r = obj.Rect;
             r.Offset(_gridSize, _gridSize);
@@ -316,6 +373,7 @@ namespace TravFloorPlan
         {
             if (_selectedObject != null)
             {
+               PushUndo();
                 _objects.Remove(_selectedObject);
                 _selectedObject = null;
                 propertyGrid.SelectedObject = null;
@@ -488,6 +546,7 @@ namespace TravFloorPlan
         {
             if (_selectedObject == null) return;
             if (_selectedObject.Type != ObjectTypes.TriangleRight && _selectedObject.Type != ObjectTypes.TriangleIso) return;
+           PushUndo();
             _selectedObject.Mirrored = !_selectedObject.Mirrored;
             propertyGrid.Refresh();
             canvasPanel.Invalidate();
@@ -529,6 +588,7 @@ namespace TravFloorPlan
                     var handle = HitTestHandle(worldPoint, _selectedObject.Rect);
                     if (handle != ResizeHandle.None)
                     {
+                       PushUndo();
                         _interaction = InteractionMode.Resize;
                         _activeHandle = handle;
                         var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
@@ -538,6 +598,7 @@ namespace TravFloorPlan
                     }
                     else if (PointInObject(worldPoint, _selectedObject))
                     {
+                       PushUndo();
                         _interaction = InteractionMode.Move;
                         var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
                         _dragStart = _snapEnabled ? SnapPoint(worldPoint, snap) : worldPoint;
@@ -658,6 +719,7 @@ namespace TravFloorPlan
 
             if (_isPlacing && e.Button == MouseButtons.Left && _selectedType != null)
             {
+               PushUndo();
                 var endWorld = ScreenToWorld(e.Location);
                 var end = _snapEnabled ? SnapPoint(endWorld, GetSnapSizeFor(_selectedType)) : endWorld;
                 var rect = GetCurrentRect(_placeStart, end);
@@ -959,7 +1021,7 @@ namespace TravFloorPlan
             }
             _summaryLabel.Text =
                 "Summary\r\n" +
-                $"Rooms: {roomsCount}" +
+                $"Rooms: {roomsCount}" + Environment.NewLine +
                 $"Total room area (grid): {totalRoomArea:0.#}";
         }
     }
