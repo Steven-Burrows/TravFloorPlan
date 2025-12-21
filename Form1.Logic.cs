@@ -337,7 +337,7 @@ namespace TravFloorPlan
         private void PasteClipboard()
         {
             if (_clipboardObject == null) return;
-           PushUndo();
+            PushUndo();
             var obj = CloneObject(_clipboardObject);
             var r = obj.Rect;
             r.Offset(_gridSize, _gridSize);
@@ -373,7 +373,7 @@ namespace TravFloorPlan
         {
             if (_selectedObject != null)
             {
-               PushUndo();
+                PushUndo();
                 _objects.Remove(_selectedObject);
                 _selectedObject = null;
                 propertyGrid.SelectedObject = null;
@@ -541,7 +541,7 @@ namespace TravFloorPlan
         {
             if (_selectedObject == null) return;
             if (_selectedObject.Type != ObjectTypes.TriangleRight && _selectedObject.Type != ObjectTypes.TriangleIso) return;
-           PushUndo();
+            PushUndo();
             _selectedObject.Mirrored = !_selectedObject.Mirrored;
             propertyGrid.Refresh();
             canvasPanel.Invalidate();
@@ -583,7 +583,7 @@ namespace TravFloorPlan
                     var handle = HitTestHandle(worldPoint, _selectedObject.Rect);
                     if (handle != ResizeHandle.None)
                     {
-                       PushUndo();
+                        PushUndo();
                         _interaction = InteractionMode.Resize;
                         _activeHandle = handle;
                         var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
@@ -593,7 +593,7 @@ namespace TravFloorPlan
                     }
                     else if (PointInObject(worldPoint, _selectedObject))
                     {
-                       PushUndo();
+                        PushUndo();
                         _interaction = InteractionMode.Move;
                         var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
                         _dragStart = _snapEnabled ? SnapPoint(worldPoint, snap) : worldPoint;
@@ -707,7 +707,7 @@ namespace TravFloorPlan
 
             if (_interaction != InteractionMode.None)
             {
-    PushUndo();
+                PushUndo();
                 _interaction = InteractionMode.None;
                 _activeHandle = ResizeHandle.None;
                 return;
@@ -715,7 +715,7 @@ namespace TravFloorPlan
 
             if (_isPlacing && e.Button == MouseButtons.Left && _selectedType != null)
             {
-               PushUndo();
+                PushUndo();
                 var endWorld = ScreenToWorld(e.Location);
                 var end = _snapEnabled ? SnapPoint(endWorld, GetSnapSizeFor(_selectedType)) : endWorld;
                 var rect = GetCurrentRect(_placeStart, end);
