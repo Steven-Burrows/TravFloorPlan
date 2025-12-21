@@ -38,7 +38,7 @@ namespace TravFloorPlan
                         _objects.Clear();
                         foreach (var d in plan.Objects)
                         {
-                            var typeParsed = ObjectType.AllTypes().FirstOrDefault(tt => string.Equals(tt.Name, d.Type, StringComparison.OrdinalIgnoreCase)) ?? ObjectType.Room;
+                            var typeParsed = ObjectTypes.FromName(d.Type) ?? ObjectTypes.Room;
                             var obj = new PlacedObject
                             {
                                 Name = d.Name,

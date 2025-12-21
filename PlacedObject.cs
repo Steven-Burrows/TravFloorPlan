@@ -7,7 +7,7 @@ namespace TravFloorPlan
     public class PlacedObject
     {
         [Browsable(false)]
-        public ObjectType Type { get; set; }
+        public ObjectTypeBase Type { get; set; }
         public Rectangle Rect { get; set; }
         public float RotationDegrees { get; set; }
         public string? Name { get; set; }
@@ -41,11 +41,11 @@ namespace TravFloorPlan
                 int g = GridSizeForArea > 0 ? GridSizeForArea : 1;
                 float w = Rect.Width / (float)g;
                 float h = Rect.Height / (float)g;
-                if (Type == ObjectType.Room)
+                if (Type == ObjectTypes.Room)
                     return w * h;
-                if (Type == ObjectType.CircularRoom)
+                if (Type == ObjectTypes.CircularRoom)
                     return (float)(System.Math.PI * 0.25 * w * h);
-                if (Type == ObjectType.TriangleRight || Type == ObjectType.TriangleIso)
+                if (Type == ObjectTypes.TriangleRight || Type == ObjectTypes.TriangleIso)
                     return 0.5f * w * h;
                 return w * h;
             }
