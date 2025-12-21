@@ -752,74 +752,41 @@ namespace TravFloorPlan
         {
             var rect = obj.Rect;
             Color semi = Color.FromArgb(120, obj.BackgroundColor);
-            if (obj.Type == ObjectTypes.Room)
-            {
-                if (obj.BackgroundColor.A > 0)
-                    FillRotatedRectangle(g, new SolidBrush(semi), rect, obj.RotationDegrees);
-                using (var pen = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
-                    DrawRotatedRectangle(g, pen, rect, obj.RotationDegrees);
-                DrawRoomText(g, obj, rect, gridSize);
-            }
-            else if (obj.Type == ObjectTypes.CircularRoom)
-            {
-                if (obj.BackgroundColor.A > 0)
-                    FillRotatedEllipse(g, new SolidBrush(semi), rect, obj.RotationDegrees);
-                using (var penC = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
-                    DrawRotatedEllipse(g, penC, rect, obj.RotationDegrees);
-                DrawRoomText(g, obj, rect, gridSize);
-            }
-            else if (obj.Type == ObjectTypes.TriangleRight || obj.Type == ObjectTypes.TriangleIso)
-            {
-                if (obj.BackgroundColor.A > 0)
-                    FillRotatedTriangle(g, new SolidBrush(semi), rect, obj.RotationDegrees, obj.Mirrored, obj.Type);
-                using (var penT = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
-                    DrawRotatedTriangle(g, penT, rect, obj.RotationDegrees, obj.Mirrored, obj.Type);
-                DrawRoomText(g, obj, rect, gridSize);
-            }
-            else if (obj.Type == ObjectTypes.Door)
-            {
-                // handled later
-            }
-            else if (obj.Type == ObjectTypes.Opening)
-            {
-                // erase underlying lines (not grid) with a thick white stroke in the rect center
-                var center = new Point(rect.Left + rect.Width / 2, rect.Top + rect.Height / 2);
-                using var erasePen = new Pen(Color.White, Math.Max(6, obj.LineWidth));
-                var state = g.Save();
-                var c = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-                g.TranslateTransform(c.X, c.Y);
-                g.RotateTransform(obj.RotationDegrees);
-                g.TranslateTransform(-c.X, -c.Y);
-                int y = center.Y;
-                int x1 = rect.Left;
-                int x2 = rect.Right;
-                int barSize = Math.Min(rect.Height, 10);
-                g.DrawLine(erasePen, x1, y - barSize / 2, x1, y + barSize / 2);
-                g.DrawLine(erasePen, x2, y - barSize / 2, x2, y + barSize / 2);
-                g.DrawLine(erasePen, x1, y, x2, y);
-                g.Restore(state);
 
-                // redraw grid lines within the opening bounds to keep grid visible
-                var clipState = g.Save();
-                g.SetClip(new RectangleF(rect.Left, rect.Top, rect.Width, rect.Height), CombineMode.Replace);
-                DrawGridWorld(g, new RectangleF(rect.Left, rect.Top, rect.Width, rect.Height), gridSize);
-                g.Restore(clipState);
-            }
-            else if (obj.Type == ObjectTypes.Window)
+            // Allow the type to handle drawing fully
+            if (obj.Type.DrawCustom(g, obj, gridSize))
             {
-                using (var brush = new SolidBrush(Color.FromArgb(120, Color.LightSkyBlue))) FillRotatedRectangle(g, brush, rect, obj.RotationDegrees);
-                using (var pen2 = new Pen(Color.DeepSkyBlue)) DrawRotatedRectangle(g, pen2, rect, obj.RotationDegrees);
+                return;
             }
-            else if (obj.Type == ObjectTypes.Table)
+
+            // Generic draw using type path
+            using var basePath = obj.Type.CreateUnrotatedPath(rect, obj.Mirrored);
+            using var path = (GraphicsPath)basePath.Clone();
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            using var m = new Matrix();
+            m.RotateAt(obj.RotationDegrees, center);
+            path.Transform(m);
+
+            if (obj.BackgroundColor.A > 0)
             {
-                using (var brush2 = new SolidBrush(Color.FromArgb(120, Color.Peru))) FillRotatedRectangle(g, brush2, rect, obj.RotationDegrees);
-                using (var pen3 = new Pen(Color.SaddleBrown)) DrawRotatedRectangle(g, pen3, rect, obj.RotationDegrees);
+                using var brush = new SolidBrush(semi);
+                g.FillPath(brush, path);
             }
-            else if (obj.Type == ObjectTypes.Chair)
+            using (var pen = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
             {
-                using (var brush3 = new SolidBrush(Color.FromArgb(120, Color.DarkOliveGreen))) FillRotatedRectangle(g, brush3, rect, obj.RotationDegrees);
-                using (var pen4 = new Pen(Color.Olive)) DrawRotatedRectangle(g, pen4, rect, obj.RotationDegrees);
+                g.DrawPath(pen, path);
             }
+
+            if (obj.Type.Group == ObjectGroup.Rooms)
+            {
+                DrawRoomText(g, obj, rect, gridSize);
+            }
+        }
+
+        // Helper so type implementations can reuse grid drawing
+        public static void Logic_DrawGrid(Graphics g, RectangleF worldBounds, int grid)
+        {
+            DrawGridWorld(g, worldBounds, grid);
         }
 
         private static void DrawRoomText(Graphics g, PlacedObject obj, Rectangle rect, int gridSize)
@@ -992,7 +959,7 @@ namespace TravFloorPlan
             }
             _summaryLabel.Text =
                 "Summary\r\n" +
-                $"Rooms: {roomsCount}    Doorways: {doorwaysCount}    Others: {othersCount}\r\n" +
+                $"Rooms: {roomsCount}" +
                 $"Total room area (grid): {totalRoomArea:0.#}";
         }
     }

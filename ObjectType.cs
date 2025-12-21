@@ -20,6 +20,12 @@ namespace TravFloorPlan
         public abstract string GetDefaultBaseName();
         public abstract float ComputeAreaUnits(Rectangle rect, int gridSize);
         public abstract GraphicsPath CreateUnrotatedPath(Rectangle rect, bool mirrored);
+
+        // Allow types to provide custom drawing beyond generic path fill/stroke
+        public virtual bool DrawCustom(Graphics g, PlacedObject obj, int gridSize)
+        {
+            return false; // default: not handled
+        }
     }
 
     // Room types
@@ -121,6 +127,35 @@ namespace TravFloorPlan
             path.AddRectangle(rect);
             return path;
         }
+        public override bool DrawCustom(Graphics g, PlacedObject obj, int gridSize)
+        {
+            // Draw door symbol using eraser and black lines
+            var rect = obj.Rect;
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            var state = g.Save();
+            g.TranslateTransform(center.X, center.Y);
+            g.RotateTransform(obj.RotationDegrees);
+            g.TranslateTransform(-center.X, -center.Y);
+
+            using var erasePen = new Pen(Color.White, 6);
+            using var pen = new Pen(Color.Black, 1);
+
+            int y = rect.Top + rect.Height / 2;
+            int x1 = rect.Left;
+            int x2 = rect.Right;
+            int barSize = Math.Min(rect.Height, 10);
+
+            g.DrawLine(erasePen, x1, y - barSize / 2, x1, y + barSize / 2);
+            g.DrawLine(erasePen, x2, y - barSize / 2, x2, y + barSize / 2);
+            g.DrawLine(erasePen, x1, y, x2, y);
+
+            g.DrawLine(pen, x1, y - barSize / 2, x1, y + barSize / 2);
+            g.DrawLine(pen, x2, y - barSize / 2, x2, y + barSize / 2);
+            g.DrawLine(pen, x1, y, x2, y);
+
+            g.Restore(state);
+            return true;
+        }
     }
 
     public sealed class OpeningType : ObjectTypeBase
@@ -135,6 +170,33 @@ namespace TravFloorPlan
             var path = new GraphicsPath();
             path.AddRectangle(rect);
             return path;
+        }
+        public override bool DrawCustom(Graphics g, PlacedObject obj, int gridSize)
+        {
+            // Erase underlying lines within a small band, then redraw grid inside opening bounds
+            var rect = obj.Rect;
+            var mid = new Point(rect.Left + rect.Width / 2, rect.Top + rect.Height / 2);
+            using var erasePen = new Pen(Color.White, Math.Max(6, obj.LineWidth));
+            var state = g.Save();
+            var c = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            g.TranslateTransform(c.X, c.Y);
+            g.RotateTransform(obj.RotationDegrees);
+            g.TranslateTransform(-c.X, -c.Y);
+            int y = mid.Y;
+            int x1 = rect.Left;
+            int x2 = rect.Right;
+            int barSize = Math.Min(rect.Height, 10);
+            g.DrawLine(erasePen, x1, y - barSize / 2, x1, y + barSize / 2);
+            g.DrawLine(erasePen, x2, y - barSize / 2, x2, y + barSize / 2);
+            g.DrawLine(erasePen, x1, y, x2, y);
+            g.Restore(state);
+
+            // Clip and redraw grid lines within opening rectangle
+            var clipState = g.Save();
+            g.SetClip(new RectangleF(rect.Left, rect.Top, rect.Width, rect.Height), CombineMode.Replace);
+            MainForm.Logic_DrawGrid(g, new RectangleF(rect.Left, rect.Top, rect.Width, rect.Height), gridSize);
+            g.Restore(clipState);
+            return true;
         }
     }
 
@@ -152,6 +214,19 @@ namespace TravFloorPlan
             path.AddRectangle(rect);
             return path;
         }
+        public override bool DrawCustom(Graphics g, PlacedObject obj, int gridSize)
+        {
+            var rect = obj.Rect;
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            var state = g.Save();
+            g.TranslateTransform(center.X, center.Y);
+            g.RotateTransform(obj.RotationDegrees);
+            g.TranslateTransform(-center.X, -center.Y);
+            using (var brush = new SolidBrush(Color.FromArgb(120, Color.LightSkyBlue))) g.FillRectangle(brush, rect);
+            using (var pen = new Pen(Color.DeepSkyBlue)) g.DrawRectangle(pen, rect);
+            g.Restore(state);
+            return true;
+        }
     }
 
     public sealed class TableType : ObjectTypeBase
@@ -167,6 +242,19 @@ namespace TravFloorPlan
             path.AddRectangle(rect);
             return path;
         }
+        public override bool DrawCustom(Graphics g, PlacedObject obj, int gridSize)
+        {
+            var rect = obj.Rect;
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            var state = g.Save();
+            g.TranslateTransform(center.X, center.Y);
+            g.RotateTransform(obj.RotationDegrees);
+            g.TranslateTransform(-center.X, -center.Y);
+            using (var brush = new SolidBrush(Color.FromArgb(120, Color.Peru))) g.FillRectangle(brush, rect);
+            using (var pen = new Pen(Color.SaddleBrown)) g.DrawRectangle(pen, rect);
+            g.Restore(state);
+            return true;
+        }
     }
 
     public sealed class ChairType : ObjectTypeBase
@@ -181,6 +269,19 @@ namespace TravFloorPlan
             var path = new GraphicsPath();
             path.AddRectangle(rect);
             return path;
+        }
+        public override bool DrawCustom(Graphics g, PlacedObject obj, int gridSize)
+        {
+            var rect = obj.Rect;
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            var state = g.Save();
+            g.TranslateTransform(center.X, center.Y);
+            g.RotateTransform(obj.RotationDegrees);
+            g.TranslateTransform(-center.X, -center.Y);
+            using (var brush = new SolidBrush(Color.FromArgb(120, Color.DarkOliveGreen))) g.FillRectangle(brush, rect);
+            using (var pen = new Pen(Color.Olive)) g.DrawRectangle(pen, rect);
+            g.Restore(state);
+            return true;
         }
     }
 
