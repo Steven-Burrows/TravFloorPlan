@@ -420,7 +420,7 @@ namespace TravFloorPlan
             {
                 if (obj.Type == ObjectTypes.Door)
                 {
-                    DrawDoorSymbol(g, obj.Rect, obj.RotationDegrees);
+                    DrawObject(g, obj, _gridSize);
                 }
             }
 
@@ -535,11 +535,6 @@ namespace TravFloorPlan
             m.RotateAt(obj.RotationDegrees, center);
             path.Transform(m);
             return path;
-        }
-
-        private static Point[] GetTrianglePoints(Rectangle rect, bool mirrored)
-        {
-            return ObjectTypes.ObjectTypeHelpers.GetTrianglePoints(rect, mirrored);
         }
 
         private void ToggleMirrorSelected()
@@ -712,6 +707,7 @@ namespace TravFloorPlan
 
             if (_interaction != InteractionMode.None)
             {
+    PushUndo();
                 _interaction = InteractionMode.None;
                 _activeHandle = ResizeHandle.None;
                 return;
@@ -869,35 +865,6 @@ namespace TravFloorPlan
             g.DrawString(areaText, areaFont, Brushes.Black, areaRect, format);
         }
 
-        private static void DrawDoorSymbol(Graphics g, Rectangle rect, float degrees)
-        {
-            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-            var state = g.Save();
-            g.TranslateTransform(center.X, center.Y);
-            g.RotateTransform(degrees);
-            g.TranslateTransform(-center.X, -center.Y);
-
-            using var erasePen = new Pen(Color.White, 6);
-            using var pen = new Pen(Color.Black, 1);
-
-            int y = rect.Top + rect.Height / 2;
-            int x1 = rect.Left;
-            int x2 = rect.Right;
-            int barSize = Math.Min(rect.Height, 10);
-
-            // erase underlying room edges along the symbol path
-            g.DrawLine(erasePen, x1, y - barSize / 2, x1, y + barSize / 2);
-            g.DrawLine(erasePen, x2, y - barSize / 2, x2, y + barSize / 2);
-            g.DrawLine(erasePen, x1, y, x2, y);
-
-            // draw symbol
-            g.DrawLine(pen, x1, y - barSize / 2, x1, y + barSize / 2);
-            g.DrawLine(pen, x2, y - barSize / 2, x2, y + barSize / 2);
-            g.DrawLine(pen, x1, y, x2, y);
-
-            g.Restore(state);
-        }
-
         private static void DrawRotatedRectangle(Graphics g, Pen pen, Rectangle rect, float degrees)
         {
             var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
@@ -906,67 +873,6 @@ namespace TravFloorPlan
             g.RotateTransform(degrees);
             g.TranslateTransform(-center.X, -center.Y);
             g.DrawRectangle(pen, rect);
-            g.Restore(state);
-        }
-
-        private static void FillRotatedRectangle(Graphics g, Brush brush, Rectangle rect, float degrees)
-        {
-            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-            var state = g.Save();
-            g.TranslateTransform(center.X, center.Y);
-            g.RotateTransform(degrees);
-            g.TranslateTransform(-center.X, -center.Y);
-            g.FillRectangle(brush, rect);
-            g.Restore(state);
-        }
-
-        private static void DrawRotatedEllipse(Graphics g, Pen pen, Rectangle rect, float degrees)
-        {
-            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-            var state = g.Save();
-            g.TranslateTransform(center.X, center.Y);
-            g.RotateTransform(degrees);
-            g.TranslateTransform(-center.X, -center.Y);
-            g.DrawEllipse(pen, rect);
-            g.Restore(state);
-        }
-
-        private static void FillRotatedEllipse(Graphics g, Brush brush, Rectangle rect, float degrees)
-        {
-            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-            var state = g.Save();
-            g.TranslateTransform(center.X, center.Y);
-            g.RotateTransform(degrees);
-            g.TranslateTransform(-center.X, -center.Y);
-            g.FillEllipse(brush, rect);
-            g.Restore(state);
-        }
-
-        private static void DrawRotatedTriangle(Graphics g, Pen pen, Rectangle rect, float degrees, bool mirrored, ObjectTypeBase type)
-        {
-            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-            var state = g.Save();
-            g.TranslateTransform(center.X, center.Y);
-            g.RotateTransform(degrees);
-            g.TranslateTransform(-center.X, -center.Y);
-            var pts = (type == ObjectTypes.TriangleIso)
-                ? ObjectTypes.ObjectTypeHelpers.GetTriangleIsoPoints(rect, mirrored)
-                : ObjectTypes.ObjectTypeHelpers.GetTrianglePoints(rect, mirrored);
-            g.DrawPolygon(pen, pts);
-            g.Restore(state);
-        }
-
-        private static void FillRotatedTriangle(Graphics g, Brush brush, Rectangle rect, float degrees, bool mirrored, ObjectTypeBase type)
-        {
-            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
-            var state = g.Save();
-            g.TranslateTransform(center.X, center.Y);
-            g.RotateTransform(degrees);
-            g.TranslateTransform(-center.X, -center.Y);
-            var pts = (type == ObjectTypes.TriangleIso)
-                ? ObjectTypes.ObjectTypeHelpers.GetTriangleIsoPoints(rect, mirrored)
-                : ObjectTypes.ObjectTypeHelpers.GetTrianglePoints(rect, mirrored);
-            g.FillPolygon(brush, pts);
             g.Restore(state);
         }
 
