@@ -9,10 +9,12 @@ namespace TravFloorPlan
     {
         public string Name { get; }
         public ObjectGroup Group { get; }
-        protected ObjectTypeBase(string name, ObjectGroup group)
+        public float DefaultLineWidth { get; }
+        protected ObjectTypeBase(string name, ObjectGroup group, float defaultLineWidth = 2f)
         {
             Name = name;
             Group = group;
+            DefaultLineWidth = defaultLineWidth;
         }
         public override string ToString() => Name;
 
@@ -204,7 +206,7 @@ namespace TravFloorPlan
     public sealed class WindowType : ObjectTypeBase
     {
         public static readonly WindowType Instance = new WindowType();
-        private WindowType() : base("Window", ObjectGroup.Others) { }
+        private WindowType() : base("Window", ObjectGroup.Others, 0f) { }
         public override int GetSnapSize(int gridSize) => gridSize;
         public override string GetDefaultBaseName() => "Window";
         public override float ComputeAreaUnits(Rectangle rect, int gridSize) => 0f;
@@ -222,8 +224,14 @@ namespace TravFloorPlan
             g.TranslateTransform(center.X, center.Y);
             g.RotateTransform(obj.RotationDegrees);
             g.TranslateTransform(-center.X, -center.Y);
-            using (var brush = new SolidBrush(Color.FromArgb(120, Color.LightSkyBlue))) g.FillRectangle(brush, rect);
-            using (var pen = new Pen(Color.DeepSkyBlue)) g.DrawRectangle(pen, rect);
+            // Determine translucent fill color
+            Color fill = obj.BackgroundColor.A == 0 ? Color.FromArgb(120, Color.LightSkyBlue) : Color.FromArgb(120, obj.BackgroundColor);
+            obj.BackgroundColor = fill;
+            using (var brush = new SolidBrush(fill)) g.FillRectangle(brush, rect);
+            if (obj.LineWidth > 0)
+            {
+                using (var pen = new Pen(obj.LineColor, obj.LineWidth)) g.DrawRectangle(pen, rect);
+            }
             g.Restore(state);
             return true;
         }
@@ -232,7 +240,7 @@ namespace TravFloorPlan
     public sealed class TableType : ObjectTypeBase
     {
         public static readonly TableType Instance = new TableType();
-        private TableType() : base("Table", ObjectGroup.Others) { }
+        private TableType() : base("Table", ObjectGroup.Others, 0f) { }
         public override int GetSnapSize(int gridSize) => gridSize;
         public override string GetDefaultBaseName() => "Table";
         public override float ComputeAreaUnits(Rectangle rect, int gridSize) => 0f;
@@ -250,8 +258,14 @@ namespace TravFloorPlan
             g.TranslateTransform(center.X, center.Y);
             g.RotateTransform(obj.RotationDegrees);
             g.TranslateTransform(-center.X, -center.Y);
-            using (var brush = new SolidBrush(Color.FromArgb(120, Color.Peru))) g.FillRectangle(brush, rect);
-            using (var pen = new Pen(Color.SaddleBrown)) g.DrawRectangle(pen, rect);
+            // Determine translucent fill color
+            Color fill = obj.BackgroundColor.A == 0 ? Color.FromArgb(120, Color.Peru) : Color.FromArgb(120, obj.BackgroundColor);
+            obj.BackgroundColor = fill;
+            using (var brush = new SolidBrush(fill)) g.FillRectangle(brush, rect);
+            if (obj.LineWidth > 0)
+            {
+                using (var pen = new Pen(obj.LineColor, obj.LineWidth)) g.DrawRectangle(pen, rect);
+            }
             g.Restore(state);
             return true;
         }
@@ -260,7 +274,7 @@ namespace TravFloorPlan
     public sealed class ChairType : ObjectTypeBase
     {
         public static readonly ChairType Instance = new ChairType();
-        private ChairType() : base("Chair", ObjectGroup.Others) { }
+        private ChairType() : base("Chair", ObjectGroup.Others, 0f) { }
         public override int GetSnapSize(int gridSize) => gridSize;
         public override string GetDefaultBaseName() => "Chair";
         public override float ComputeAreaUnits(Rectangle rect, int gridSize) => 0f;
@@ -278,8 +292,14 @@ namespace TravFloorPlan
             g.TranslateTransform(center.X, center.Y);
             g.RotateTransform(obj.RotationDegrees);
             g.TranslateTransform(-center.X, -center.Y);
-            using (var brush = new SolidBrush(Color.FromArgb(120, Color.DarkOliveGreen))) g.FillRectangle(brush, rect);
-            using (var pen = new Pen(Color.Olive)) g.DrawRectangle(pen, rect);
+            // Determine translucent fill color
+            Color fill = obj.BackgroundColor.A == 0 ? Color.FromArgb(120, Color.DarkOliveGreen) : Color.FromArgb(120, obj.BackgroundColor);
+            obj.BackgroundColor = fill;
+            using (var brush = new SolidBrush(fill)) g.FillRectangle(brush, rect);
+            if (obj.LineWidth > 0)
+            {
+                using (var pen = new Pen(obj.LineColor, obj.LineWidth)) g.DrawRectangle(pen, rect);
+            }
             g.Restore(state);
             return true;
         }

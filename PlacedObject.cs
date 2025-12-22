@@ -21,7 +21,7 @@ namespace TravFloorPlan
 
         [Browsable(true)]
         [DisplayName("Line Width")]
-        public float LineWidth { get; set; } = 4f;
+        public float LineWidth { get; set; }
 
         [Browsable(true)]
         [DisplayName("Line Color")]

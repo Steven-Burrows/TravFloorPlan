@@ -13,16 +13,12 @@ namespace TravFloorPlan
         private readonly Plan _plan = new Plan();
         private List<PlacedObject> _objects => _plan.Objects;
         private readonly Stack<List<PlacedObject>> _undoStack = new Stack<List<PlacedObject>>();
+        private List<PlacedObject>? _pendingUndoSnapshot;
 
-        private void PushUndo()
+        private void PushUndo(List<PlacedObject>? snapshot = null)
         {
-            // Snapshot clone of current objects
-            var snapshot = new List<PlacedObject>(_objects.Count);
-            foreach (var o in _objects)
-            {
-                snapshot.Add(CloneObject(o));
-            }
-            _undoStack.Push(snapshot);
+            // Snapshot clone of current objects unless a pre-captured snapshot is provided
+            _undoStack.Push(snapshot ?? CloneObjectsSnapshot());
         }
 
         private void Undo()
@@ -202,7 +198,22 @@ namespace TravFloorPlan
 
             RefreshPaletteList();
             UpdateSummaryPanel();
-            propertyGrid.PropertyValueChanged += (_, __) => { RefreshPaletteList(); UpdateSummaryPanel(); };
+            // Capture snapshot at the start of a manual property edit
+            propertyGrid.SelectedGridItemChanged += (_, __) =>
+            {
+                _pendingUndoSnapshot = CloneObjectsSnapshot();
+            };
+            // Push undo when a property value is changed manually
+            propertyGrid.PropertyValueChanged += (_, __) =>
+            {
+                if (_pendingUndoSnapshot != null)
+                {
+                    PushUndo(_pendingUndoSnapshot);
+                    _pendingUndoSnapshot = null;
+                }
+                RefreshPaletteList();
+                UpdateSummaryPanel();
+            };
         }
 
         private static IEnumerable<ObjectTypeBase> GetTypesForGroup(ObjectGroup group)
@@ -731,6 +742,10 @@ namespace TravFloorPlan
                 if (rect.Width > 4 && rect.Height > 4)
                 {
                     var obj = new PlacedObject { Type = _selectedType, Rect = rect, RotationDegrees = _currentRotation, GridSizeForArea = _gridSize };
+                    if (obj.LineWidth <= 0)
+                    {
+                        obj.LineWidth = obj.Type.DefaultLineWidth;
+                    }
 
                     if (string.IsNullOrWhiteSpace(obj.Name))
                     {
@@ -830,10 +845,11 @@ namespace TravFloorPlan
                 using var brush = new SolidBrush(semi);
                 g.FillPath(brush, path);
             }
-            using (var pen = new Pen(obj.LineColor, Math.Max(1f, obj.LineWidth)))
-            {
-                g.DrawPath(pen, path);
-            }
+            float strokeWidth = Math.Max(1f, obj.LineWidth);
+            using (var pen = new Pen(obj.LineColor, strokeWidth))
+             {
+                 g.DrawPath(pen, path);
+             }
 
             if (obj.Type.Group == ObjectGroup.Rooms)
             {
@@ -929,6 +945,16 @@ namespace TravFloorPlan
                 "Summary\r\n" +
                 $"Rooms: {roomsCount}" + Environment.NewLine +
                 $"Total room area (grid): {totalRoomArea:0.#}";
+        }
+
+        private List<PlacedObject> CloneObjectsSnapshot()
+        {
+            var snapshot = new List<PlacedObject>(_objects.Count);
+            foreach (var o in _objects)
+            {
+                snapshot.Add(CloneObject(o));
+            }
+            return snapshot;
         }
     }
 }
