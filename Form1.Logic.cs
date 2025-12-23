@@ -814,6 +814,11 @@ namespace TravFloorPlan
                 DrawRoomObject(g, obj, gridSize);
                 return;
             }
+            if (obj.Type == ObjectTypes.TriangleRight || obj.Type == ObjectTypes.TriangleIso)
+            {
+                DrawTriangleRoomObject(g, obj, gridSize);
+                return;
+            }
 
             var rect = obj.Rect;
             Color semi = Color.FromArgb(120, obj.BackgroundColor);
@@ -898,6 +903,80 @@ namespace TravFloorPlan
             }
 
             DrawRoomText(g, obj, rect, gridSize);
+        }
+
+        private static void DrawTriangleRoomObject(Graphics g, PlacedObject obj, int gridSize)
+        {
+            var rect = obj.Rect;
+            Color semi = Color.FromArgb(120, obj.BackgroundColor);
+
+            Point[] basePoints = obj.Type == ObjectTypes.TriangleRight
+                ? ObjectTypes.ObjectTypeHelpers.GetTrianglePoints(rect, obj.Mirrored)
+                : ObjectTypes.ObjectTypeHelpers.GetTriangleIsoPoints(rect, obj.Mirrored);
+
+            using var path = new GraphicsPath();
+            path.AddPolygon(basePoints);
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            using var m = new Matrix();
+            m.RotateAt(obj.RotationDegrees, center);
+            path.Transform(m);
+
+            if (obj.BackgroundColor.A > 0)
+            {
+                using var brush = new SolidBrush(semi);
+                g.FillPath(brush, path);
+            }
+
+            var drawPoints = basePoints.Select(p => new PointF(p.X, p.Y)).ToArray();
+            m.TransformPoints(drawPoints);
+
+            float strokeWidth = Math.Max(1f, obj.LineWidth);
+            using var pen = new Pen(obj.LineColor, strokeWidth);
+            var hideEdges = GetTriangleEdgeHideFlags(obj);
+            for (int i = 0; i < 3; i++)
+            {
+                if (hideEdges[i]) continue;
+                int next = (i + 1) % 3;
+                g.DrawLine(pen, drawPoints[i], drawPoints[next]);
+            }
+
+            DrawRoomText(g, obj, rect, gridSize);
+        }
+
+        private static bool[] GetTriangleEdgeHideFlags(PlacedObject obj)
+        {
+            var hide = new bool[3];
+            if (obj.Type == ObjectTypes.TriangleRight)
+            {
+                if (!obj.Mirrored)
+                {
+                    hide[0] = obj.HideWestSide;   // vertical edge on the left
+                    hide[1] = obj.HideNorthSide;  // horizontal top edge
+                    hide[2] = obj.HideSouthSide;  // diagonal edge
+                }
+                else
+                {
+                    hide[0] = obj.HideEastSide;   // vertical edge on the right
+                    hide[1] = obj.HideNorthSide;  // horizontal top edge
+                    hide[2] = obj.HideSouthSide;  // diagonal edge
+                }
+            }
+            else // TriangleIso
+            {
+                if (!obj.Mirrored)
+                {
+                    hide[0] = obj.HideWestSide;   // left diagonal
+                    hide[1] = obj.HideEastSide;   // right diagonal
+                    hide[2] = obj.HideSouthSide;  // bottom edge
+                }
+                else
+                {
+                    hide[0] = obj.HideWestSide;   // left diagonal (flipped)
+                    hide[1] = obj.HideEastSide;   // right diagonal (flipped)
+                    hide[2] = obj.HideNorthSide;  // top edge
+                }
+            }
+            return hide;
         }
 
         // Helper so type implementations can reuse grid drawing

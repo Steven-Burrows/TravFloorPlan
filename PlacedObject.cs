@@ -1,11 +1,26 @@
 using System;
 using System.ComponentModel;
 using System.Drawing;
+using System.Linq;
 
 namespace TravFloorPlan
 {
     public class PlacedObject
     {
+        private static readonly string[] RoomSidePropertyNames = new[]
+        {
+            nameof(HideNorthSide),
+            nameof(HideEastSide),
+            nameof(HideSouthSide),
+            nameof(HideWestSide)
+        };
+
+        static PlacedObject()
+        {
+            var parentProvider = TypeDescriptor.GetProvider(typeof(PlacedObject));
+            TypeDescriptor.AddProvider(new PlacedObjectTypeDescriptionProvider(parentProvider), typeof(PlacedObject));
+        }
+
         [Browsable(false)]
         public ObjectTypeBase Type
         {
@@ -133,10 +148,56 @@ namespace TravFloorPlan
 
         internal bool HasHiddenRoomSide => SupportsRoomSides && (_hideNorthSide || _hideEastSide || _hideSouthSide || _hideWestSide);
 
-        private bool SupportsRoomSides => Type == ObjectTypes.Room;
+        private bool SupportsRoomSides =>
+            Type.Group == ObjectGroup.Rooms && Type != ObjectTypes.CircularRoom;
         private bool _hideNorthSide;
         private bool _hideEastSide;
         private bool _hideSouthSide;
         private bool _hideWestSide;
+
+        private sealed class PlacedObjectTypeDescriptionProvider : TypeDescriptionProvider
+        {
+            public PlacedObjectTypeDescriptionProvider(TypeDescriptionProvider parent)
+                : base(parent)
+            {
+            }
+
+            public override ICustomTypeDescriptor GetTypeDescriptor(Type objectType, object? instance)
+            {
+                var baseDescriptor = base.GetTypeDescriptor(objectType, instance);
+                if (instance is PlacedObject placed)
+                {
+                    return new PlacedObjectCustomTypeDescriptor(baseDescriptor, placed);
+                }
+                return baseDescriptor;
+            }
+        }
+
+        private sealed class PlacedObjectCustomTypeDescriptor : CustomTypeDescriptor
+        {
+            private readonly PlacedObject _instance;
+
+            public PlacedObjectCustomTypeDescriptor(ICustomTypeDescriptor parent, PlacedObject instance)
+                : base(parent)
+            {
+                _instance = instance;
+            }
+
+            public override PropertyDescriptorCollection GetProperties(Attribute[]? attributes)
+            {
+                var props = base.GetProperties(attributes);
+                if (_instance.SupportsRoomSides)
+                {
+                    return props;
+                }
+
+                var filtered = props.Cast<PropertyDescriptor>()
+                    .Where(p => !RoomSidePropertyNames.Contains(p.Name, StringComparer.Ordinal))
+                    .ToArray();
+                return new PropertyDescriptorCollection(filtered, true);
+            }
+
+            public override PropertyDescriptorCollection GetProperties() => GetProperties(null);
+        }
     }
 }
