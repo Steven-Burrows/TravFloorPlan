@@ -35,12 +35,7 @@ namespace TravFloorPlan
         }
 
         private static ObjectGroup GetGroupForType(ObjectTypeBase type) => type.Group;
-        private static ObjectTypeBase GetDefaultTypeForGroup(ObjectGroup group)
-        {
-            if (group == ObjectGroup.Rooms) return ObjectTypes.Room;
-            if (group == ObjectGroup.Doorways) return ObjectTypes.Door;
-            return ObjectTypes.Window;
-        }
+        // Removed default type per group; selecting a group header now puts UI into pan mode
 
         private class PaletteEntry
         {
@@ -116,7 +111,8 @@ namespace TravFloorPlan
                 {
                     if (entry.IsHeader)
                     {
-                        _selectedType = GetDefaultTypeForGroup(entry.HeaderGroup);
+                        // Group headers act like pan mode (no placement type selected)
+                        _selectedType = null;
                     }
                     else if (entry.ObjectRef != null)
                     {
