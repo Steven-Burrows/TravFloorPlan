@@ -22,5 +22,9 @@ namespace TravFloorPlan
         public float LineWidth { get; set; }
         public int LineColorArgb { get; set; }
         public int BackgroundColorArgb { get; set; }
+        public bool HideNorthSide { get; set; }
+        public bool HideEastSide { get; set; }
+        public bool HideSouthSide { get; set; }
+        public bool HideWestSide { get; set; }
     }
 }

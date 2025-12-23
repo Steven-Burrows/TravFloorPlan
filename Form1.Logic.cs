@@ -34,43 +34,6 @@ namespace TravFloorPlan
             UpdateSummaryPanel();
         }
 
-        private static ObjectGroup GetGroupForType(ObjectTypeBase type) => type.Group;
-        // Removed default type per group; selecting a group header now puts UI into pan mode
-
-        private class PaletteEntry
-        {
-            public bool IsHeader { get; }
-            public ObjectGroup HeaderGroup { get; }
-            public PlacedObject? ObjectRef { get; }
-            private readonly string _text;
-            public PaletteEntry(ObjectGroup group)
-            {
-                IsHeader = true;
-                HeaderGroup = group;
-                _text = group.ToString();
-            }
-            public PaletteEntry(PlacedObject obj)
-            {
-                IsHeader = false;
-                ObjectRef = obj;
-                HeaderGroup = obj.Type.Group;
-                var name = string.IsNullOrWhiteSpace(obj.Name) ? "<unnamed>" : obj.Name;
-                _text = $"      - {name}";
-            }
-            public override string ToString() => _text;
-        }
-
-        private class TypeEntry
-        {
-            public ObjectTypeBase Type { get; }
-            private readonly string _text;
-            public TypeEntry(ObjectTypeBase type)
-            {
-                Type = type;
-                _text = $"   • {type.Name}";
-            }
-            public override string ToString() => _text;
-        }
 
         private PlacedObject? _selectedObject = null;
         private ObjectTypeBase? _selectedType = null;
@@ -88,6 +51,7 @@ namespace TravFloorPlan
         private const int HandleSize = 8;
         private enum ResizeHandle { None, N, S, E, W, NE, NW, SE, SW }
         private ContextMenuStrip _canvasMenu;
+        private TreeView _paletteTree;
         private Panel _summaryPanel;
         private Label _summaryLabel;
         private PlacedObject? _clipboardObject;
@@ -104,28 +68,22 @@ namespace TravFloorPlan
 
         private void InitializeFloorPlanUi()
         {
-            paletteListBox.Items.Clear();
-            paletteListBox.SelectedIndexChanged += (_, __) =>
+            // Initialize TreeView-based palette
+            _paletteTree ??= new TreeView
             {
-                if (paletteListBox.SelectedItem is PaletteEntry entry)
-                {
-                    if (entry.IsHeader)
-                    {
-                        // Group headers act like pan mode (no placement type selected)
-                        _selectedType = null;
-                    }
-                    else if (entry.ObjectRef != null)
-                    {
-                        _selectedObject = entry.ObjectRef;
-                        propertyGrid.SelectedObject = _selectedObject;
-                        canvasPanel.Invalidate();
-                    }
-                }
-                else if (paletteListBox.SelectedItem is TypeEntry te)
-                {
-                    _selectedType = te.Type;
-                }
+                Dock = DockStyle.Fill,
+                HideSelection = false
             };
+            if (_paletteTree.Parent == null && paletteListBox.Parent != null)
+            {
+                paletteListBox.Parent.Controls.Add(_paletteTree);
+                _paletteTree.BringToFront();
+                paletteListBox.Visible = false;
+            }
+            _paletteTree.Nodes.Clear();
+            _paletteTree.AfterSelect -= PaletteTree_AfterSelect;
+            _paletteTree.AfterSelect += PaletteTree_AfterSelect;
+
             canvasPanel.MouseDown += CanvasPanel_MouseDown;
             canvasPanel.MouseMove += CanvasPanel_MouseMove;
             canvasPanel.MouseUp += CanvasPanel_MouseUp;
@@ -145,7 +103,7 @@ namespace TravFloorPlan
             var rotateRightItem = new ToolStripMenuItem("Rotate Right 90", null, (_, __) => RotateSelected(90f));
             var mirrorItem = new ToolStripMenuItem("Mirror (Triangle)", null, (_, __) => ToggleMirrorSelected());
             var deleteItem = new ToolStripMenuItem("Delete", null, (_, __) => DeleteSelected());
-            var panItem = new ToolStripMenuItem("Pan", null, (_, __) => { paletteListBox.ClearSelected(); _selectedType = null; });
+            var panItem = new ToolStripMenuItem("Pan", null, (_, __) => { if (_paletteTree != null) _paletteTree.SelectedNode = null; _selectedType = null; });
             _canvasMenu.Items.AddRange(new ToolStripItem[] { panItem, new ToolStripSeparator(), undoItem, new ToolStripSeparator(), copyItem, pasteItem, new ToolStripSeparator(), rotateLeftItem, rotateRightItem, mirrorItem, new ToolStripSeparator(), deleteItem });
             canvasPanel.ContextMenuStrip = _canvasMenu;
             _canvasMenu.Opening += (_, e) =>
@@ -221,56 +179,79 @@ namespace TravFloorPlan
         {
             var prevObj = _selectedObject;
             var prevType = _selectedType;
-            paletteListBox.BeginUpdate();
-            paletteListBox.Items.Clear();
+
+            if (_paletteTree == null) return;
+
+            _paletteTree.BeginUpdate();
+            _paletteTree.Nodes.Clear();
 
             var groups = new[] { ObjectGroup.Rooms, ObjectGroup.Doorways, ObjectGroup.Others };
             foreach (var group in groups)
             {
-                var header = new PaletteEntry(group);
-                paletteListBox.Items.Add(header);
-
+                var groupNode = new TreeNode(group.ToString()) { Tag = group };
                 foreach (var type in GetTypesForGroup(group))
                 {
-                    paletteListBox.Items.Add(new TypeEntry(type));
-
-                    foreach (var obj in _objects)
+                    var typeNode = new TreeNode(type.Name) { Tag = type };
+                    foreach (var obj in _objects.Where(o => o.Type == type))
                     {
-                        if (obj.Type == type)
-                        {
-                            paletteListBox.Items.Add(new PaletteEntry(obj));
-                        }
+                        var name = string.IsNullOrWhiteSpace(obj.Name) ? "<unnamed>" : obj.Name;
+                        var objNode = new TreeNode(name) { Tag = obj };
+                        typeNode.Nodes.Add(objNode);
                     }
+                    groupNode.Nodes.Add(typeNode);
                 }
+                _paletteTree.Nodes.Add(groupNode);
             }
+            _paletteTree.ExpandAll();
+            _paletteTree.EndUpdate();
 
-            paletteListBox.EndUpdate();
+            // Restore selection if possible
             if (prevObj != null)
             {
-                foreach (var item in paletteListBox.Items)
-                {
-                    if (item is PaletteEntry pe && pe.ObjectRef == prevObj)
-                    {
-                        paletteListBox.SelectedItem = item;
-                        UpdateSummaryPanel();
-                        return;
-                    }
-                }
+                var node = FindNodeByTag(_paletteTree.Nodes, prevObj);
+                if (node != null) _paletteTree.SelectedNode = node;
             }
-            if (prevType != null)
+            else if (prevType != null)
             {
-                var prevGroup = prevType.Group;
-                foreach (var item in paletteListBox.Items)
-                {
-                    if (item is PaletteEntry pe && pe.IsHeader && pe.HeaderGroup == prevGroup)
-                    {
-                        paletteListBox.SelectedItem = item;
-                        UpdateSummaryPanel();
-                        return;
-                    }
-                }
+                var node = FindNodeByTag(_paletteTree.Nodes, prevType);
+                if (node != null) _paletteTree.SelectedNode = node;
             }
             UpdateSummaryPanel();
+        }
+
+        private void PaletteTree_AfterSelect(object? sender, TreeViewEventArgs e)
+        {
+            switch (e.Node?.Tag)
+            {
+                case ObjectTypeBase type:
+                    _selectedType = type;
+                    _selectedObject = null;
+                    propertyGrid.SelectedObject = null;
+                    break;
+                case PlacedObject obj:
+                    _selectedObject = obj;
+                    _selectedType = null;
+                    propertyGrid.SelectedObject = obj;
+                    break;
+                default:
+                    _selectedType = null;
+                    _selectedObject = null;
+                    propertyGrid.SelectedObject = null;
+                    break;
+            }
+            canvasPanel.Invalidate();
+            UpdateSummaryPanel();
+        }
+
+        private static TreeNode? FindNodeByTag(TreeNodeCollection nodes, object tag)
+        {
+            foreach (TreeNode n in nodes)
+            {
+                if (Equals(n.Tag, tag)) return n;
+                var child = FindNodeByTag(n.Nodes, tag);
+                if (child != null) return child;
+            }
+            return null;
         }
 
         private static float NormalizeAngle(float deg)
@@ -372,7 +353,11 @@ namespace TravFloorPlan
                 Mirrored = s.Mirrored,
                 LineWidth = s.LineWidth,
                 LineColor = s.LineColor,
-                BackgroundColor = s.BackgroundColor
+                BackgroundColor = s.BackgroundColor,
+                HideNorthSide = s.HideNorthSide,
+                HideEastSide = s.HideEastSide,
+                HideSouthSide = s.HideSouthSide,
+                HideWestSide = s.HideWestSide
             };
         }
 
@@ -585,20 +570,25 @@ namespace TravFloorPlan
 
                 var worldPoint = _snapEnabled ? SnapPoint(ScreenToWorld(e.Location), GetSnapSizeFor(_selectedObject?.Type ?? _selectedType ?? ObjectTypes.Room)) : ScreenToWorld(e.Location);
 
-                if (_selectedObject != null && Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f)
+                if (_selectedObject != null)
                 {
-                    var handle = HitTestHandle(worldPoint, _selectedObject.Rect);
-                    if (handle != ResizeHandle.None)
+                    bool axisAligned = Math.Abs(_selectedObject.RotationDegrees % 90f) < 0.001f;
+                    if (axisAligned)
                     {
-                        PushUndo();
-                        _interaction = InteractionMode.Resize;
-                        _activeHandle = handle;
-                        var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
-                        _dragStart = _snapEnabled ? SnapPoint(worldPoint, snap) : worldPoint;
-                        _originalRect = _selectedObject.Rect;
-                        return;
+                        var handle = HitTestHandle(worldPoint, _selectedObject.Rect);
+                        if (handle != ResizeHandle.None)
+                        {
+                            PushUndo();
+                            _interaction = InteractionMode.Resize;
+                            _activeHandle = handle;
+                            var snap = _snapEnabled ? GetSnapSizeFor(_selectedObject.Type) : 0;
+                            _dragStart = _snapEnabled ? SnapPoint(worldPoint, snap) : worldPoint;
+                            _originalRect = _selectedObject.Rect;
+                            return;
+                        }
                     }
-                    else if (PointInObject(worldPoint, _selectedObject))
+
+                    if (PointInObject(worldPoint, _selectedObject))
                     {
                         PushUndo();
                         _interaction = InteractionMode.Move;
@@ -819,6 +809,12 @@ namespace TravFloorPlan
 
         private static void DrawObject(Graphics g, PlacedObject obj, int gridSize)
         {
+            if (obj.Type == ObjectTypes.Room)
+            {
+                DrawRoomObject(g, obj, gridSize);
+                return;
+            }
+
             var rect = obj.Rect;
             Color semi = Color.FromArgb(120, obj.BackgroundColor);
 
@@ -851,6 +847,57 @@ namespace TravFloorPlan
             {
                 DrawRoomText(g, obj, rect, gridSize);
             }
+        }
+
+        private static void DrawRoomObject(Graphics g, PlacedObject obj, int gridSize)
+        {
+            var rect = obj.Rect;
+            Color semi = Color.FromArgb(120, obj.BackgroundColor);
+
+            // Allow Room type to provide a custom draw (currently it does not)
+            if (obj.Type.DrawCustom(g, obj, gridSize))
+            {
+                DrawRoomText(g, obj, rect, gridSize);
+                return;
+            }
+
+            using var basePath = obj.Type.CreateUnrotatedPath(rect, obj.Mirrored);
+            using var path = (GraphicsPath)basePath.Clone();
+            var center = new PointF(rect.Left + rect.Width / 2f, rect.Top + rect.Height / 2f);
+            using var m = new Matrix();
+            m.RotateAt(obj.RotationDegrees, center);
+            path.Transform(m);
+
+            if (obj.BackgroundColor.A > 0)
+            {
+                using var brush = new SolidBrush(semi);
+                g.FillPath(brush, path);
+            }
+
+            float strokeWidth = Math.Max(1f, obj.LineWidth);
+            using var pen = new Pen(obj.LineColor, strokeWidth);
+
+            if (!obj.HasHiddenRoomSide)
+            {
+                g.DrawPath(pen, path);
+            }
+            else
+            {
+                var corners = new PointF[]
+                {
+                    new PointF(rect.Left, rect.Top), // North-West
+                    new PointF(rect.Right, rect.Top), // North-East
+                    new PointF(rect.Right, rect.Bottom), // South-East
+                    new PointF(rect.Left, rect.Bottom) // South-West
+                };
+                m.TransformPoints(corners);
+                if (!obj.HideNorthSide) g.DrawLine(pen, corners[0], corners[1]);
+                if (!obj.HideEastSide) g.DrawLine(pen, corners[1], corners[2]);
+                if (!obj.HideSouthSide) g.DrawLine(pen, corners[2], corners[3]);
+                if (!obj.HideWestSide) g.DrawLine(pen, corners[3], corners[0]);
+            }
+
+            DrawRoomText(g, obj, rect, gridSize);
         }
 
         // Helper so type implementations can reuse grid drawing

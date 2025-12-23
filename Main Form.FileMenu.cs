@@ -49,7 +49,11 @@ namespace TravFloorPlan
                                 LineWidth = d.LineWidth,
                                 LineColor = Color.FromArgb(d.LineColorArgb),
                                 BackgroundColor = Color.FromArgb(d.BackgroundColorArgb),
-                                GridSizeForArea = _gridSize
+                                GridSizeForArea = _gridSize,
+                                HideNorthSide = d.HideNorthSide,
+                                HideEastSide = d.HideEastSide,
+                                HideSouthSide = d.HideSouthSide,
+                                HideWestSide = d.HideWestSide
                             };
                             _objects.Add(obj);
                         }
@@ -99,7 +103,11 @@ namespace TravFloorPlan
                         Mirrored = o.Mirrored,
                         LineWidth = o.LineWidth,
                         LineColorArgb = o.LineColor.ToArgb(),
-                        BackgroundColorArgb = o.BackgroundColor.ToArgb()
+                        BackgroundColorArgb = o.BackgroundColor.ToArgb(),
+                        HideNorthSide = o.HideNorthSide,
+                        HideEastSide = o.HideEastSide,
+                        HideSouthSide = o.HideSouthSide,
+                        HideWestSide = o.HideWestSide
                     });
                 }
                 var json = JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
