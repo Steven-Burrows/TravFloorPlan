@@ -297,13 +297,21 @@ namespace TravFloorPlan
             }
             if (e.KeyCode == Keys.R)
             {
-                _currentRotation = NormalizeAngle(_currentRotation + 90f);
-                canvasPanel.Invalidate();
+                if (_selectedObject != null)
+                {
+                    RotateSelected(90f);
+                }
+                e.Handled = true;
+                return;
             }
             else if (e.KeyCode == Keys.E)
             {
-                _currentRotation = NormalizeAngle(_currentRotation - 90f);
-                canvasPanel.Invalidate();
+                if (_selectedObject != null)
+                {
+                    RotateSelected(-90f);
+                }
+                e.Handled = true;
+                return;
             }
             else if (e.KeyCode == Keys.G)
             {
@@ -727,7 +735,7 @@ namespace TravFloorPlan
                 }
                 if (rect.Width > 4 && rect.Height > 4)
                 {
-                    var obj = new PlacedObject { Type = _selectedType, Rect = rect, RotationDegrees = _currentRotation, GridSizeForArea = _gridSize };
+                    var obj = new PlacedObject { Type = _selectedType, Rect = rect, RotationDegrees = 0f, GridSizeForArea = _gridSize };
                     if (obj.LineWidth <= 0)
                     {
                         obj.LineWidth = obj.Type.DefaultLineWidth;
